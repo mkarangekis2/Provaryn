@@ -105,3 +105,34 @@ export async function addChatMessageSupabase(input: {
     extractionPreview: input.extractionPreview
   };
 }
+
+export async function getChatRateLimitStatusSupabase(userId: string, options?: { maxPerMinute?: number }) {
+  const maxPerMinute = options?.maxPerMinute ?? 6;
+  const conversationId = await getOrCreateConversation(userId);
+  const supabase = createServiceSupabaseClient();
+
+  const since = new Date(Date.now() - 60_000).toISOString();
+  const recentRes = await supabase
+    .from("messages")
+    .select("id, created_at", { count: "exact" })
+    .eq("conversation_id", conversationId)
+    .eq("role", "user")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(maxPerMinute);
+
+  if (recentRes.error) throw recentRes.error;
+
+  const recentCount = recentRes.count ?? 0;
+  if (recentCount < maxPerMinute) {
+    return { limited: false as const, retryAfterSec: 0 };
+  }
+
+  const latest = recentRes.data?.[0]?.created_at;
+  if (!latest) {
+    return { limited: true as const, retryAfterSec: 30 };
+  }
+  const ageMs = Date.now() - new Date(latest).getTime();
+  const retryAfterSec = Math.max(1, Math.ceil((60_000 - ageMs) / 1000));
+  return { limited: true as const, retryAfterSec };
+}

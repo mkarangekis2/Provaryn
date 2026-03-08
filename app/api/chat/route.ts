@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addChatMessageSupabase, listChatMessagesSupabase } from "@/server/persistence/supabase-chat";
+import { addChatMessageSupabase, getChatRateLimitStatusSupabase, listChatMessagesSupabase } from "@/server/persistence/supabase-chat";
 import { addEventLogSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
@@ -53,6 +53,23 @@ export async function POST(request: NextRequest) {
   if (!auth.ok) return auth.response;
   const userId = auth.userId;
   try {
+    const rateLimit = await getChatRateLimitStatusSupabase(userId, { maxPerMinute: 6 });
+    if (rateLimit.limited) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Rate limit exceeded. Please wait before sending another message.",
+          retryAfterSec: rateLimit.retryAfterSec
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSec)
+          }
+        }
+      );
+    }
+
     const userMessage = await addChatMessageSupabase({
       userId,
       role: "user",
