@@ -4,6 +4,7 @@ import { z } from "zod";
 import { addChatMessage, addEventLog, listChatMessages } from "@/server/mock/store";
 import { addChatMessageSupabase, listChatMessagesSupabase } from "@/server/persistence/supabase-chat";
 import { addEventLogSupabase } from "@/server/persistence/supabase-intake";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const getSchema = z.object({ userId: z.string().min(5) });
 const postSchema = z.object({ userId: z.string().min(5), message: z.string().min(1) });
@@ -35,28 +36,31 @@ function buildAssistantReply(input: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const parsed = getSchema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
 
   try {
-    const messages = await listChatMessagesSupabase(parsed.data.userId);
+    const messages = await listChatMessagesSupabase(auth.userId);
     return NextResponse.json({ ok: true, messages });
   } catch {
-    return NextResponse.json({ ok: true, messages: listChatMessages(parsed.data.userId) });
+    return NextResponse.json({ ok: true, messages: listChatMessages(auth.userId) });
   }
 }
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   let userMessage: ReturnType<typeof addChatMessage>;
   try {
     userMessage = await addChatMessageSupabase({
-      userId: body.userId,
+      userId,
       role: "user",
       content: body.message
     });
   } catch {
-    userMessage = addChatMessage(body.userId, {
+    userMessage = addChatMessage(userId, {
       id: randomUUID(),
       role: "user",
       content: body.message,
@@ -68,13 +72,13 @@ export async function POST(request: NextRequest) {
   let assistantMessage: ReturnType<typeof addChatMessage>;
   try {
     assistantMessage = await addChatMessageSupabase({
-      userId: body.userId,
+      userId,
       role: "assistant",
       content: response.content,
       extractionPreview: response.extractionPreview
     });
   } catch {
-    assistantMessage = addChatMessage(body.userId, {
+    assistantMessage = addChatMessage(userId, {
       id: randomUUID(),
       role: "assistant",
       content: response.content,
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
   if (response.extractionPreview.type === "event_log") {
     try {
       await addEventLogSupabase({
-        userId: body.userId,
+        userId,
         eventType: "injury",
         description: body.message,
         occurredAt: new Date().toISOString(),
@@ -95,7 +99,7 @@ export async function POST(request: NextRequest) {
       });
     } catch {
       addEventLog({
-        userId: body.userId,
+        userId,
         eventType: "injury",
         description: body.message,
         occurredAt: new Date().toISOString(),

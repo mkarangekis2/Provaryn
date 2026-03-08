@@ -3,6 +3,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { addDocument, listDocuments } from "@/server/mock/store";
 import { addDocumentSupabase, listDocumentsSupabase } from "@/server/persistence/supabase-intake";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const createSchema = z.object({
   userId: z.string().min(5),
@@ -17,14 +18,17 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest) {
   const body = createSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const payload = { ...body, userId: auth.userId };
   let saved: ReturnType<typeof addDocument>;
   try {
-    saved = await addDocumentSupabase(body);
+    saved = await addDocumentSupabase(payload);
   } catch {
     saved = addDocument({
       id: randomUUID(),
       createdAt: new Date().toISOString(),
-      ...body
+      ...payload
     });
   }
 
@@ -32,12 +36,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
   try {
-    const documents = await listDocumentsSupabase(userId);
+    const documents = await listDocumentsSupabase(auth.userId);
     return NextResponse.json({ ok: true, documents });
   } catch {
-    return NextResponse.json({ ok: true, documents: listDocuments(userId) });
+    return NextResponse.json({ ok: true, documents: listDocuments(auth.userId) });
   }
 }

@@ -8,6 +8,7 @@ import {
   addBillingEventSupabase,
   listBillingEventsSupabase
 } from "@/server/persistence/supabase-settings";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const getSchema = z.object({ userId: z.string().min(5) });
 const postSchema = z.object({
@@ -17,12 +18,12 @@ const postSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const parsed = getSchema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
 
-  let events = listBillingEvents(parsed.data.userId);
+  let events = listBillingEvents(auth.userId);
   try {
-    events = await listBillingEventsSupabase(parsed.data.userId);
+    events = await listBillingEventsSupabase(auth.userId);
   } catch {
     // fallback to mock store
   }
@@ -32,16 +33,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   let event: ReturnType<typeof addBillingEvent>;
   try {
     event = await addBillingEventSupabase({
-      userId: body.userId,
+      userId,
       eventType: body.eventType,
       active: body.active,
       source: "manual"
     });
     await addAuditEntrySupabase({
-      userId: body.userId,
+      userId,
       action: "billing_event_recorded",
       category: "billing",
       metadata: { eventType: body.eventType, active: body.active }
@@ -49,14 +53,14 @@ export async function POST(request: NextRequest) {
   } catch {
     event = addBillingEvent({
       id: randomUUID(),
-      userId: body.userId,
+      userId,
       eventType: body.eventType,
       active: body.active,
       source: "manual",
       createdAt: new Date().toISOString()
     });
 
-    addAuditEntry(body.userId, {
+    addAuditEntry(userId, {
       id: randomUUID(),
       action: "billing_event_recorded",
       category: "billing",

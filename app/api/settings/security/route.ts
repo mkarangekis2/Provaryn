@@ -7,22 +7,23 @@ import {
   getSecurityCenterSupabase,
   upsertSecurityCenterSupabase
 } from "@/server/persistence/supabase-settings";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const getSchema = z.object({ userId: z.string().min(5) });
 const postSchema = z.object({ userId: z.string().min(5), mfaEnabled: z.boolean(), loginAlertsEnabled: z.boolean() });
 
 export async function GET(request: NextRequest) {
-  const parsed = getSchema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
 
   let existing = null as ReturnType<typeof getSecurityCenter>;
   try {
-    existing = await getSecurityCenterSupabase(parsed.data.userId);
+    existing = await getSecurityCenterSupabase(auth.userId);
   } catch {
     existing = null;
   }
-  existing = existing ?? getSecurityCenter(parsed.data.userId) ?? upsertSecurityCenter({
-    userId: parsed.data.userId,
+  existing = existing ?? getSecurityCenter(auth.userId) ?? upsertSecurityCenter({
+    userId: auth.userId,
     mfaEnabled: false,
     loginAlertsEnabled: true,
     trustedDeviceCount: 1,
@@ -38,9 +39,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const payload = { ...body, userId: auth.userId };
   let existing = null as ReturnType<typeof getSecurityCenter>;
   try {
-    existing = await getSecurityCenterSupabase(body.userId);
+    existing = await getSecurityCenterSupabase(payload.userId);
   } catch {
     existing = null;
   }
@@ -53,33 +57,33 @@ export async function POST(request: NextRequest) {
 
   try {
     saved = await upsertSecurityCenterSupabase({
-      userId: body.userId,
-      mfaEnabled: body.mfaEnabled,
-      loginAlertsEnabled: body.loginAlertsEnabled,
+      userId: payload.userId,
+      mfaEnabled: payload.mfaEnabled,
+      loginAlertsEnabled: payload.loginAlertsEnabled,
       trustedDeviceCount: existing?.trustedDeviceCount ?? 1,
       recentEvents,
       updatedAt: new Date().toISOString()
     });
     await addAuditEntrySupabase({
-      userId: body.userId,
+      userId: payload.userId,
       action: "security_settings_updated",
       category: "security",
-      metadata: { mfaEnabled: body.mfaEnabled, loginAlertsEnabled: body.loginAlertsEnabled }
+      metadata: { mfaEnabled: payload.mfaEnabled, loginAlertsEnabled: payload.loginAlertsEnabled }
     });
   } catch {
     saved = upsertSecurityCenter({
-      userId: body.userId,
-      mfaEnabled: body.mfaEnabled,
-      loginAlertsEnabled: body.loginAlertsEnabled,
+      userId: payload.userId,
+      mfaEnabled: payload.mfaEnabled,
+      loginAlertsEnabled: payload.loginAlertsEnabled,
       trustedDeviceCount: existing?.trustedDeviceCount ?? 1,
       recentEvents,
       updatedAt: new Date().toISOString()
     });
-    addAuditEntry(body.userId, {
+    addAuditEntry(payload.userId, {
       id: randomUUID(),
       action: "security_settings_updated",
       category: "security",
-      metadata: { mfaEnabled: body.mfaEnabled, loginAlertsEnabled: body.loginAlertsEnabled },
+      metadata: { mfaEnabled: payload.mfaEnabled, loginAlertsEnabled: payload.loginAlertsEnabled },
       createdAt: new Date().toISOString()
     });
   }

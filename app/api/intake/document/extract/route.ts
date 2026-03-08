@@ -7,6 +7,7 @@ import {
   getDocumentSupabase,
   upsertDocumentExtractionSupabase
 } from "@/server/persistence/supabase-intake";
+import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const schema = z.object({
   userId: z.string().min(5),
@@ -34,10 +35,13 @@ function fallbackExtraction(text: string) {
 
 export async function POST(request: NextRequest) {
   const body = schema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   try {
     const existingSupabase = await getDocumentExtractionSupabase(body.documentId);
     if (existingSupabase) {
-      return NextResponse.json({ ok: true, extraction: { ...existingSupabase, userId: body.userId }, cached: true });
+      return NextResponse.json({ ok: true, extraction: { ...existingSupabase, userId }, cached: true });
     }
   } catch {
     // continue
@@ -45,12 +49,12 @@ export async function POST(request: NextRequest) {
 
   let document = null as Awaited<ReturnType<typeof getDocumentSupabase>> | ReturnType<typeof getDocument>;
   try {
-    document = await getDocumentSupabase(body.userId, body.documentId);
+    document = await getDocumentSupabase(userId, body.documentId);
   } catch {
     // continue
   }
   if (!document) {
-    document = getDocument(body.userId, body.documentId);
+    document = getDocument(userId, body.documentId);
   }
   if (!document) return NextResponse.json({ ok: false, error: "Document not found" }, { status: 404 });
 
@@ -65,11 +69,11 @@ export async function POST(request: NextRequest) {
         extracted: ai.data,
         status: "pending_review"
       });
-      extraction = { ...supabaseSaved, userId: body.userId };
+      extraction = { ...supabaseSaved, userId };
     } catch {
       extraction = upsertDocumentExtraction({
         documentId: body.documentId,
-        userId: body.userId,
+        userId,
         extracted: ai.data,
         status: "pending_review",
         updatedAt: new Date().toISOString()
@@ -86,11 +90,11 @@ export async function POST(request: NextRequest) {
         extracted: fallback,
         status: "pending_review"
       });
-      extraction = { ...supabaseSaved, userId: body.userId };
+      extraction = { ...supabaseSaved, userId };
     } catch {
       extraction = upsertDocumentExtraction({
         documentId: body.documentId,
-        userId: body.userId,
+        userId,
         extracted: fallback,
         status: "pending_review",
         updatedAt: new Date().toISOString()

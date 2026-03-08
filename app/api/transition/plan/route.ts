@@ -12,6 +12,7 @@ import {
   listDocumentExtractionsSupabase,
   listEventLogsSupabase
 } from "@/server/persistence/supabase-intelligence";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const postSchema = z.object({
   userId: z.string().min(5),
@@ -20,26 +21,29 @@ const postSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
   try {
-    const plan = await getTransitionPlanSupabase(userId);
+    const plan = await getTransitionPlanSupabase(auth.userId);
     return NextResponse.json({ ok: true, plan });
   } catch {
-    return NextResponse.json({ ok: true, plan: getTransitionPlan(userId) });
+    return NextResponse.json({ ok: true, plan: getTransitionPlan(auth.userId) });
   }
 }
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
-  let checkIns = listCheckIns(body.userId);
-  let events = listEventLogs(body.userId);
-  let extractions = listDocumentExtractions(body.userId);
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
+  let checkIns = listCheckIns(userId);
+  let events = listEventLogs(userId);
+  let extractions = listDocumentExtractions(userId);
   try {
     [checkIns, events, extractions] = await Promise.all([
-      listCheckInsSupabase(body.userId),
-      listEventLogsSupabase(body.userId),
-      listDocumentExtractionsSupabase(body.userId)
+      listCheckInsSupabase(userId),
+      listEventLogsSupabase(userId),
+      listDocumentExtractionsSupabase(userId)
     ]);
   } catch {
     // fallback remains
@@ -64,7 +68,7 @@ export async function POST(request: NextRequest) {
   let plan: ReturnType<typeof upsertTransitionPlan>;
   try {
     plan = await upsertTransitionPlanSupabase({
-      userId: body.userId,
+      userId,
       active: true,
       targetDate: body.targetDate,
       triggeredReason: body.triggeredReason,
@@ -72,7 +76,7 @@ export async function POST(request: NextRequest) {
     });
   } catch {
     plan = upsertTransitionPlan({
-      userId: body.userId,
+      userId,
       active: true,
       targetDate: body.targetDate,
       triggeredReason: body.triggeredReason,

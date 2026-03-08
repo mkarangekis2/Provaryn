@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { upsertDocumentExtraction } from "@/server/mock/store";
 import { upsertDocumentExtractionSupabase } from "@/server/persistence/supabase-intake";
+import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const schema = z.object({
   userId: z.string().min(5),
@@ -21,6 +22,9 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   const body = schema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   let saved: ReturnType<typeof upsertDocumentExtraction>;
   try {
     const supabaseSaved = await upsertDocumentExtractionSupabase({
@@ -28,11 +32,11 @@ export async function POST(request: NextRequest) {
       extracted: body.extracted,
       status: "confirmed"
     });
-    saved = { ...supabaseSaved, userId: body.userId };
+    saved = { ...supabaseSaved, userId };
   } catch {
     saved = upsertDocumentExtraction({
       documentId: body.documentId,
-      userId: body.userId,
+      userId,
       extracted: body.extracted,
       status: "confirmed",
       updatedAt: new Date().toISOString()

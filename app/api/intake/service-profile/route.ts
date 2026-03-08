@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { upsertServiceProfile } from "@/server/mock/store";
 import { upsertServiceProfileSupabase } from "@/server/persistence/supabase-intake";
+import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const schema = z.object({
   userId: z.string().uuid().or(z.string().min(5)),
@@ -16,11 +17,14 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   const body = schema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const payload = { ...body, userId: auth.userId };
   let saved: ReturnType<typeof upsertServiceProfile>;
   try {
-    saved = await upsertServiceProfileSupabase(body);
+    saved = await upsertServiceProfileSupabase(payload);
   } catch {
-    saved = upsertServiceProfile(body);
+    saved = upsertServiceProfile(payload);
   }
   return NextResponse.json({ ok: true, profile: saved });
 }

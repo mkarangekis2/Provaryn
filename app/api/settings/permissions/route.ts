@@ -7,6 +7,7 @@ import {
   getPermissionCenterSupabase,
   upsertPermissionCenterSupabase
 } from "@/server/persistence/supabase-settings";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const getSchema = z.object({ userId: z.string().min(5) });
 const postSchema = z.object({
@@ -18,17 +19,17 @@ const postSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const parsed = getSchema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
 
   let existing = null as ReturnType<typeof getPermissionCenter>;
   try {
-    existing = await getPermissionCenterSupabase(parsed.data.userId);
+    existing = await getPermissionCenterSupabase(auth.userId);
   } catch {
     existing = null;
   }
-  existing = existing ?? getPermissionCenter(parsed.data.userId) ?? upsertPermissionCenter({
-    userId: parsed.data.userId,
+  existing = existing ?? getPermissionCenter(auth.userId) ?? upsertPermissionCenter({
+    userId: auth.userId,
     shareReadinessWithCoach: false,
     shareDocumentsWithCoach: false,
     organizationAccessEnabled: false,
@@ -41,31 +42,34 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const payload = { ...body, userId: auth.userId };
   let saved: ReturnType<typeof upsertPermissionCenter>;
   try {
-    saved = await upsertPermissionCenterSupabase({ ...body, updatedAt: new Date().toISOString() });
+    saved = await upsertPermissionCenterSupabase({ ...payload, updatedAt: new Date().toISOString() });
     await addAuditEntrySupabase({
-      userId: body.userId,
+      userId: payload.userId,
       action: "permissions_updated",
       category: "permissions",
       metadata: {
-        shareReadinessWithCoach: body.shareReadinessWithCoach,
-        shareDocumentsWithCoach: body.shareDocumentsWithCoach,
-        organizationAccessEnabled: body.organizationAccessEnabled,
-        exportRequested: body.exportRequested
+        shareReadinessWithCoach: payload.shareReadinessWithCoach,
+        shareDocumentsWithCoach: payload.shareDocumentsWithCoach,
+        organizationAccessEnabled: payload.organizationAccessEnabled,
+        exportRequested: payload.exportRequested
       }
     });
   } catch {
-    saved = upsertPermissionCenter({ ...body, updatedAt: new Date().toISOString() });
-    addAuditEntry(body.userId, {
+    saved = upsertPermissionCenter({ ...payload, updatedAt: new Date().toISOString() });
+    addAuditEntry(payload.userId, {
       id: randomUUID(),
       action: "permissions_updated",
       category: "permissions",
       metadata: {
-        shareReadinessWithCoach: body.shareReadinessWithCoach,
-        shareDocumentsWithCoach: body.shareDocumentsWithCoach,
-        organizationAccessEnabled: body.organizationAccessEnabled,
-        exportRequested: body.exportRequested
+        shareReadinessWithCoach: payload.shareReadinessWithCoach,
+        shareDocumentsWithCoach: payload.shareDocumentsWithCoach,
+        organizationAccessEnabled: payload.organizationAccessEnabled,
+        exportRequested: payload.exportRequested
       },
       createdAt: new Date().toISOString()
     });

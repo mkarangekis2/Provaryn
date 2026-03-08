@@ -5,6 +5,7 @@ import {
   getNotificationPreferencesSupabase,
   upsertNotificationPreferencesSupabase
 } from "@/server/persistence/supabase-settings";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const getSchema = z.object({ userId: z.string().min(5) });
 const postSchema = z.object({
@@ -18,17 +19,17 @@ const postSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const parsed = getSchema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
 
   let existing = null as ReturnType<typeof getNotificationPreferences>;
   try {
-    existing = await getNotificationPreferencesSupabase(parsed.data.userId);
+    existing = await getNotificationPreferencesSupabase(auth.userId);
   } catch {
     existing = null;
   }
-  existing = existing ?? getNotificationPreferences(parsed.data.userId) ?? upsertNotificationPreferences({
-    userId: parsed.data.userId,
+  existing = existing ?? getNotificationPreferences(auth.userId) ?? upsertNotificationPreferences({
+    userId: auth.userId,
     weeklyCheckInReminder: true,
     transitionTaskReminder: true,
     evidenceGapReminder: true,
@@ -43,11 +44,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const payload = { ...body, userId: auth.userId };
   let saved: ReturnType<typeof upsertNotificationPreferences>;
   try {
-    saved = await upsertNotificationPreferencesSupabase({ ...body, updatedAt: new Date().toISOString() });
+    saved = await upsertNotificationPreferencesSupabase({ ...payload, updatedAt: new Date().toISOString() });
   } catch {
-    saved = upsertNotificationPreferences({ ...body, updatedAt: new Date().toISOString() });
+    saved = upsertNotificationPreferences({ ...payload, updatedAt: new Date().toISOString() });
   }
   return NextResponse.json({ ok: true, preferences: saved });
 }

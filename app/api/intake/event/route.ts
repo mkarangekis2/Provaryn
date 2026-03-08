@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { addEventLog } from "@/server/mock/store";
 import { addEventLogSupabase } from "@/server/persistence/supabase-intake";
+import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const schema = z.object({
   userId: z.string().uuid().or(z.string().min(5)),
@@ -14,11 +15,14 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   const body = schema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const payload = { ...body, userId: auth.userId };
   let saved: ReturnType<typeof addEventLog>;
   try {
-    saved = await addEventLogSupabase(body);
+    saved = await addEventLogSupabase(payload);
   } catch {
-    saved = addEventLog(body);
+    saved = addEventLog(payload);
   }
   return NextResponse.json({ ok: true, event: saved });
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { generateNarrative } from "@/services/claim-builder-service";
 import { listNarratives, upsertNarrative } from "@/server/mock/store";
 import { addNarrativeSupabase, listNarrativesSupabase } from "@/server/persistence/supabase-claim-builder";
+import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const postSchema = z.object({
   userId: z.string().min(5),
@@ -27,6 +28,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   let existing = listNarratives(body.packageId);
   try {
     existing = await listNarrativesSupabase(body.packageId);
@@ -45,7 +49,7 @@ export async function POST(request: NextRequest) {
   try {
     saved = await addNarrativeSupabase({
       packageId: body.packageId,
-      userId: body.userId,
+      userId,
       conditionId: body.conditionId,
       narrativeType: body.narrativeType,
       content: generated.content,
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
     saved = upsertNarrative({
       id: generated.id ?? randomUUID(),
       packageId: body.packageId,
-      userId: body.userId,
+      userId,
       conditionId: body.conditionId,
       narrativeType: body.narrativeType,
       content: generated.content,

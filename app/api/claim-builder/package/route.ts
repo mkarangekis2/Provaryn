@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getClaimPackage, upsertClaimPackage } from "@/server/mock/store";
 import { getClaimPackageSupabase, upsertClaimPackageSupabase } from "@/server/persistence/supabase-claim-builder";
+import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const postSchema = z.object({
   userId: z.string().min(5),
@@ -22,23 +23,26 @@ const patchSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
   try {
-    const claimPackage = await getClaimPackageSupabase(userId);
+    const claimPackage = await getClaimPackageSupabase(auth.userId);
     return NextResponse.json({ ok: true, claimPackage });
   } catch {
-    return NextResponse.json({ ok: true, claimPackage: getClaimPackage(userId) });
+    return NextResponse.json({ ok: true, claimPackage: getClaimPackage(auth.userId) });
   }
 }
 
 export async function POST(request: NextRequest) {
   const body = postSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   let claimPackage: ReturnType<typeof upsertClaimPackage>;
   try {
-    const existing = await getClaimPackageSupabase(body.userId);
+    const existing = await getClaimPackageSupabase(userId);
     claimPackage = await upsertClaimPackageSupabase({
-      userId: body.userId,
+      userId,
       title: body.title,
       selectedConditions: body.selectedConditions,
       forms: existing?.forms ?? {
@@ -49,10 +53,10 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch {
-    const existing = getClaimPackage(body.userId);
+    const existing = getClaimPackage(userId);
     claimPackage = upsertClaimPackage({
       id: existing?.id ?? randomUUID(),
-      userId: body.userId,
+      userId,
       title: body.title,
       selectedConditions: body.selectedConditions,
       forms: existing?.forms ?? {
@@ -70,18 +74,21 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const body = patchSchema.parse(await request.json());
+  const auth = await requireAuthorizedUser(request, body.userId);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   let updated: ReturnType<typeof upsertClaimPackage>;
   try {
-    const existing = await getClaimPackageSupabase(body.userId);
+    const existing = await getClaimPackageSupabase(userId);
     if (!existing) return NextResponse.json({ ok: false, error: "Claim package not found" }, { status: 404 });
     updated = await upsertClaimPackageSupabase({
-      userId: body.userId,
+      userId,
       title: existing.title,
       selectedConditions: body.selectedConditions,
       forms: body.forms ?? existing.forms
     });
   } catch {
-    const existing = getClaimPackage(body.userId);
+    const existing = getClaimPackage(userId);
     if (!existing) return NextResponse.json({ ok: false, error: "Claim package not found" }, { status: 404 });
     updated = upsertClaimPackage({
       ...existing,

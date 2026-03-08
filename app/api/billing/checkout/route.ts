@@ -3,6 +3,7 @@ import { z } from "zod";
 import { env } from "@/lib/env";
 import { createCheckoutSession } from "@/services/billing-service";
 import { getPriceIdForProduct, type BillingEventType } from "@/lib/billing/price-map";
+import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const schema = z.object({
   userId: z.string().min(5),
@@ -12,6 +13,9 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = schema.parse(await request.json());
+    const auth = await requireAuthorizedUser(request, body.userId);
+    if (!auth.ok) return auth.response;
+
     const priceId = getPriceIdForProduct(body.product);
     if (!priceId) {
       return NextResponse.json({ ok: false, error: `Missing Stripe price id for ${body.product}` }, { status: 400 });
@@ -20,7 +24,7 @@ export async function POST(request: NextRequest) {
     const successUrl = `${env.APP_BASE_URL}/settings/billing?checkout=success&product=${body.product}`;
     const cancelUrl = `${env.APP_BASE_URL}/settings/billing?checkout=cancel`;
     const session = await createCheckoutSession({
-      userId: body.userId,
+      userId: auth.userId,
       priceId,
       product: body.product as BillingEventType,
       successUrl,
