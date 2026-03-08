@@ -6,9 +6,11 @@ import { requireAuthorizedUser } from "@/lib/auth/request-user";
 import {
   addCheckInSupabase,
   addTimelineEntrySupabase,
+  upsertServiceStartTimelineSupabase,
   upsertServiceProfileSupabase
 } from "@/server/persistence/supabase-intake";
 import { upsertTransitionPlanSupabase } from "@/server/persistence/supabase-transition-claims";
+import { upsertUserConditionsSupabase } from "@/server/persistence/supabase-intelligence";
 
 const exposureValueSchema = z.object({
   level: z.enum(["none", "possible", "likely", "confirmed"]),
@@ -52,6 +54,36 @@ const schema = z.object({
   health: z.array(healthEntrySchema).min(1),
   goals: z.string().optional()
 });
+
+function computeYearsServed(input: { dateJoined?: string; currentStatus?: string; etsDate?: string }, fallback: number) {
+  if (!input.dateJoined) return fallback;
+  const joined = new Date(`${input.dateJoined}T00:00:00`);
+  if (Number.isNaN(joined.getTime())) return fallback;
+
+  const now = new Date();
+  let end = now;
+  if (input.etsDate) {
+    const ets = new Date(`${input.etsDate}T00:00:00`);
+    if (!Number.isNaN(ets.getTime()) && ets <= now) {
+      end = ets;
+    }
+  }
+
+  const status = (input.currentStatus ?? "").toLowerCase();
+  if ((status.includes("retired") || status.includes("separated") || status.includes("veteran")) && input.etsDate) {
+    const ets = new Date(`${input.etsDate}T00:00:00`);
+    if (!Number.isNaN(ets.getTime())) {
+      end = ets <= now ? ets : now;
+    }
+  }
+
+  if (end < joined) return 0;
+  const yearDiff = end.getFullYear() - joined.getFullYear();
+  const anniversaryPassed =
+    end.getMonth() > joined.getMonth() ||
+    (end.getMonth() === joined.getMonth() && end.getDate() >= joined.getDate());
+  return Math.max(0, anniversaryPassed ? yearDiff : yearDiff - 1);
+}
 
 function mapFrequency(occurrence: "none" | "rare" | "weekly" | "daily") {
   if (occurrence === "daily") return 7;
@@ -114,16 +146,47 @@ function deterministicFallback(input: z.infer<typeof schema>) {
   } as const;
 }
 
+function normalizeLikelihood(likelihood: string): "low" | "medium" | "high" {
+  const value = likelihood.toLowerCase();
+  if (value === "high" || value === "medium" || value === "low") return value;
+  return "medium";
+}
+
+function mapLikelihoodToConfidence(likelihood: string) {
+  const normalized = normalizeLikelihood(likelihood);
+  if (normalized === "high") return 0.82;
+  if (normalized === "medium") return 0.64;
+  return 0.45;
+}
+
+function mapLikelihoodToReadiness(likelihood: string, missingEvidenceCount: number) {
+  const normalized = normalizeLikelihood(likelihood);
+  const base = normalized === "high" ? 70 : normalized === "medium" ? 52 : 36;
+  const penalty = Math.min(20, missingEvidenceCount * 4);
+  return Math.max(10, base - penalty);
+}
+
 export async function POST(request: NextRequest) {
   const body = schema.parse(await request.json());
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
 
   const payload = { ...body, userId: auth.userId };
+  const computedYearsServed = computeYearsServed(
+    {
+      dateJoined: payload.serviceProfile.dateJoined,
+      currentStatus: payload.serviceProfile.currentStatus,
+      etsDate: payload.serviceProfile.etsDate
+    },
+    payload.serviceProfile.yearsServed
+  );
 
   try {
     const analysisResult = await onboardingIntelligenceService({
-      serviceProfile: payload.serviceProfile,
+      serviceProfile: {
+        ...payload.serviceProfile,
+        yearsServed: computedYearsServed
+      },
       timeline: payload.timeline,
       exposures: payload.exposures,
       health: payload.health,
@@ -138,21 +201,17 @@ export async function POST(request: NextRequest) {
       component: payload.serviceProfile.component,
       rank: payload.serviceProfile.rank,
       mos: payload.serviceProfile.mos,
-      yearsServed: payload.serviceProfile.yearsServed,
+      yearsServed: computedYearsServed,
       currentStatus: payload.serviceProfile.currentStatus,
       etsDate: payload.serviceProfile.etsDate
     });
 
     if (payload.serviceProfile.dateJoined) {
-      await addTimelineEntrySupabase({
+      await upsertServiceStartTimelineSupabase({
         userId: payload.userId,
-        entryType: "service_start",
-        title: "Entered military service",
-        startDate: payload.serviceProfile.dateJoined,
-        metadata: {
-          branch: payload.serviceProfile.branch,
-          component: payload.serviceProfile.component
-        }
+        dateJoined: payload.serviceProfile.dateJoined,
+        branch: payload.serviceProfile.branch,
+        component: payload.serviceProfile.component
       });
     }
 
@@ -197,10 +256,22 @@ export async function POST(request: NextRequest) {
       tasks: analysis.immediatePlan.map((item) => ({
         id: randomUUID(),
         title: item.title,
-        rationale: `${item.rationale} (${item.timeframe})`,
+        rationale: `Onboarding: ${item.rationale} (${item.timeframe})`,
         urgency: item.urgency,
         completed: false,
         relatedConditions: item.relatedConditions
+      }))
+    });
+
+    await upsertUserConditionsSupabase({
+      userId: payload.userId,
+      conditions: analysis.inferredConditions.map((condition) => ({
+        label: condition.name,
+        category: condition.bodySystem.toLowerCase().replace(/\s+/g, "_"),
+        confidence: mapLikelihoodToConfidence(condition.likelihood),
+        readiness: mapLikelihoodToReadiness(condition.likelihood, condition.missingEvidence.length),
+        diagnosisStatus: condition.missingEvidence.some((item) => item.toLowerCase().includes("diagnos")) ? "missing" : "suspected",
+        serviceConnection: condition.likelihood === "high" ? 72 : condition.likelihood === "medium" ? 58 : 44
       }))
     });
 
@@ -216,10 +287,22 @@ export async function POST(request: NextRequest) {
         tasks: analysis.immediatePlan.map((item) => ({
           id: randomUUID(),
           title: item.title,
-          rationale: `${item.rationale} (${item.timeframe})`,
+          rationale: `Onboarding: ${item.rationale} (${item.timeframe})`,
           urgency: item.urgency,
           completed: false,
           relatedConditions: item.relatedConditions
+        }))
+      });
+
+      await upsertUserConditionsSupabase({
+        userId: payload.userId,
+        conditions: analysis.inferredConditions.map((condition) => ({
+          label: condition.name,
+          category: condition.bodySystem.toLowerCase().replace(/\s+/g, "_"),
+          confidence: mapLikelihoodToConfidence(condition.likelihood),
+          readiness: mapLikelihoodToReadiness(condition.likelihood, condition.missingEvidence.length),
+          diagnosisStatus: condition.missingEvidence.some((item) => item.toLowerCase().includes("diagnos")) ? "missing" : "suspected",
+          serviceConnection: condition.likelihood === "high" ? 72 : condition.likelihood === "medium" ? 58 : 44
         }))
       });
       return NextResponse.json({

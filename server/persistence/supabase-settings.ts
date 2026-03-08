@@ -67,12 +67,23 @@ export type NotificationPreferences = {
 export async function getServiceProfileSupabase(userId: string) {
   await ensureSupabaseProfile(userId);
   const supabase = createServiceSupabaseClient();
-  const result = await supabase
+  const [result, serviceStart] = await Promise.all([
+    supabase
     .from("service_profiles")
     .select("user_id, branch, component, rank, mos, years_served, current_status, ets_date")
     .eq("user_id", userId)
-    .maybeSingle();
+    .maybeSingle(),
+    supabase
+      .from("service_timeline_entries")
+      .select("start_date")
+      .eq("user_id", userId)
+      .eq("entry_type", "service_start")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+  ]);
   if (result.error) throw result.error;
+  if (serviceStart.error) throw serviceStart.error;
   if (!result.data) return null;
 
   return {
@@ -83,7 +94,8 @@ export async function getServiceProfileSupabase(userId: string) {
     mos: result.data.mos ?? "",
     yearsServed: result.data.years_served ?? 0,
     currentStatus: result.data.current_status ?? "",
-    etsDate: result.data.ets_date ?? undefined
+    etsDate: result.data.ets_date ?? undefined,
+    dateJoined: serviceStart.data?.start_date ?? undefined
   };
 }
 

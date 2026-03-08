@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getOrCreateClientUserId } from "@/lib/client-user";
+import { usStates } from "@/lib/us-states";
 
 type Match = { title: string; category: string; state: string; eligibilityConfidence: number };
 
@@ -27,7 +28,10 @@ export function BenefitsHubPanel() {
       <Card className="p-6">
         <h1 className="text-3xl font-display">Benefits Discovery Hub</h1>
         <select className="mt-3 rounded-xl bg-panel2 border border-border px-3 py-2" value={stateCode} onChange={(e) => setStateCode(e.target.value)}>
-          <option value="ALL">All States</option><option value="TX">Texas</option><option value="CA">California</option><option value="FL">Florida</option>
+          <option value="ALL">All 50 States</option>
+          {usStates.map((state) => (
+            <option key={state.code} value={state.code}>{state.name}</option>
+          ))}
         </select>
       </Card>
       <div className="space-y-3">

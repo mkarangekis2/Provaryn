@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getServiceProfileSupabase, addAuditEntrySupabase } from "@/server/persistence/supabase-settings";
-import { upsertServiceProfileSupabase } from "@/server/persistence/supabase-intake";
+import { upsertServiceProfileSupabase, upsertServiceStartTimelineSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const getSchema = z.object({ userId: z.string().min(5) });
@@ -13,7 +13,8 @@ const postSchema = z.object({
   mos: z.string().min(1),
   yearsServed: z.number().int().min(0).max(60),
   currentStatus: z.string().min(1),
-  etsDate: z.string().optional()
+  etsDate: z.string().optional(),
+  dateJoined: z.string().optional()
 });
 
 export async function GET(request: NextRequest) {
@@ -29,7 +30,8 @@ export async function GET(request: NextRequest) {
       mos: "11B",
       yearsServed: 6,
       currentStatus: "Serving",
-      etsDate: ""
+      etsDate: "",
+      dateJoined: ""
     };
 
     return NextResponse.json({ ok: true, profile });
@@ -48,6 +50,14 @@ export async function POST(request: NextRequest) {
   const payload = { ...body, userId: auth.userId };
   try {
     const profile = await upsertServiceProfileSupabase(payload);
+    if (payload.dateJoined) {
+      await upsertServiceStartTimelineSupabase({
+        userId: payload.userId,
+        dateJoined: payload.dateJoined,
+        branch: payload.branch,
+        component: payload.component
+      });
+    }
     await addAuditEntrySupabase({
       userId: payload.userId,
       action: "profile_updated",

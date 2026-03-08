@@ -19,6 +19,41 @@ const postSchema = z.object({
   triggeredReason: z.string().min(3)
 });
 
+type TransitionTask = {
+  id: string;
+  title: string;
+  rationale: string;
+  urgency: number;
+  completed: boolean;
+  relatedConditions: string[];
+};
+
+function mergeTasks(existing: TransitionTask[], generated: TransitionTask[]) {
+  const byTitle = new Map<string, TransitionTask>();
+
+  for (const task of existing) {
+    byTitle.set(task.title.trim().toLowerCase(), task);
+  }
+
+  for (const task of generated) {
+    const key = task.title.trim().toLowerCase();
+    const current = byTitle.get(key);
+    if (!current) {
+      byTitle.set(key, task);
+      continue;
+    }
+
+    byTitle.set(key, {
+      ...current,
+      urgency: Math.max(current.urgency, task.urgency),
+      rationale: current.rationale || task.rationale,
+      relatedConditions: Array.from(new Set([...(current.relatedConditions ?? []), ...(task.relatedConditions ?? [])]))
+    });
+  }
+
+  return Array.from(byTitle.values()).sort((a, b) => b.urgency - a.urgency);
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuthorizedQueryUser(request);
   if (!auth.ok) return auth.response;
@@ -61,12 +96,15 @@ export async function POST(request: NextRequest) {
       }))
     });
 
+    const existingPlan = await getTransitionPlanSupabase(userId);
+    const mergedTasks = mergeTasks(existingPlan?.tasks ?? [], tasks);
+
     const plan = await upsertTransitionPlanSupabase({
       userId,
       active: true,
-      targetDate: body.targetDate,
+      targetDate: body.targetDate ?? existingPlan?.targetDate,
       triggeredReason: body.triggeredReason,
-      tasks
+      tasks: mergedTasks
     });
     return NextResponse.json({ ok: true, plan });
   } catch (error) {

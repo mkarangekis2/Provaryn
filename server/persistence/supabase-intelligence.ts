@@ -1,6 +1,7 @@
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { ensureSupabaseProfile } from "@/server/persistence/supabase-common";
 import type { CheckInInput, DocumentExtractionInput, EventLogInput } from "@/types/intelligence";
+import type { DetectedCondition } from "@/services/conditions/condition-detection-service";
 
 export async function listEventLogsSupabase(userId: string): Promise<EventLogInput[]> {
   await ensureSupabaseProfile(userId);
@@ -136,4 +137,70 @@ export async function getUserSnapshotSupabase(userId: string) {
     events,
     extractions
   };
+}
+
+export async function upsertUserConditionsSupabase(input: {
+  userId: string;
+  conditions: Array<
+    Pick<DetectedCondition, "label" | "category" | "confidence" | "readiness" | "diagnosisStatus"> & {
+      serviceConnection: number;
+    }
+  >;
+}) {
+  await ensureSupabaseProfile(input.userId);
+  const supabase = createServiceSupabaseClient();
+
+  const existingResult = await supabase
+    .from("user_conditions")
+    .select("id, label")
+    .eq("user_id", input.userId);
+  if (existingResult.error) throw existingResult.error;
+
+  const existingByLabel = new Map(
+    (existingResult.data ?? []).map((row) => [row.label.trim().toLowerCase(), row.id])
+  );
+
+  const toInsert: Array<{
+    user_id: string;
+    label: string;
+    status: "tracking";
+    confidence: number;
+    readiness_score: number;
+    service_connection_confidence: number;
+  }> = [];
+
+  for (const condition of input.conditions) {
+    const key = condition.label.trim().toLowerCase();
+    const existingId = existingByLabel.get(key);
+    const confidence = Math.min(0.99, Math.max(0.05, condition.confidence));
+    const serviceConnectionConfidence = Math.min(0.99, Math.max(0.05, condition.serviceConnection / 100));
+    const readiness = Math.min(100, Math.max(0, Math.round(condition.readiness)));
+
+    if (existingId) {
+      const updateResult = await supabase
+        .from("user_conditions")
+        .update({
+          status: "tracking",
+          confidence,
+          readiness_score: readiness,
+          service_connection_confidence: serviceConnectionConfidence
+        })
+        .eq("id", existingId);
+      if (updateResult.error) throw updateResult.error;
+    } else {
+      toInsert.push({
+        user_id: input.userId,
+        label: condition.label,
+        status: "tracking",
+        confidence,
+        readiness_score: readiness,
+        service_connection_confidence: serviceConnectionConfidence
+      });
+    }
+  }
+
+  if (toInsert.length > 0) {
+    const insertResult = await supabase.from("user_conditions").insert(toInsert);
+    if (insertResult.error) throw insertResult.error;
+  }
 }

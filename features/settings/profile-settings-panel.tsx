@@ -13,6 +13,7 @@ type Profile = {
   yearsServed: number;
   currentStatus: string;
   etsDate?: string;
+  dateJoined?: string;
 };
 
 export function ProfileSettingsPanel() {
@@ -50,6 +51,7 @@ export function ProfileSettingsPanel() {
     <Card className="p-6 space-y-4">
       <h1 className="text-3xl font-display">Profile Settings</h1>
       <div className="grid md:grid-cols-2 gap-3">
+        <input className="rounded-xl bg-panel2 border border-border px-3 py-2" type="date" value={profile.dateJoined ?? ""} onChange={(e) => setProfile({ ...profile, dateJoined: e.target.value })} />
         <input className="rounded-xl bg-panel2 border border-border px-3 py-2" value={profile.branch} onChange={(e) => setProfile({ ...profile, branch: e.target.value })} />
         <input className="rounded-xl bg-panel2 border border-border px-3 py-2" value={profile.component} onChange={(e) => setProfile({ ...profile, component: e.target.value })} />
         <input className="rounded-xl bg-panel2 border border-border px-3 py-2" value={profile.rank} onChange={(e) => setProfile({ ...profile, rank: e.target.value })} />

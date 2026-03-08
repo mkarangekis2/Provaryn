@@ -160,6 +160,18 @@ export function WeeklyCheckInForm() {
     }
 
     trackEvent("first_checkin_completed", { userId, entryCount: payload.entries.length });
+    const trackerRefresh = await fetch("/api/transition/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        triggeredReason: "Weekly check-in signal refresh"
+      })
+    });
+    if (trackerRefresh.ok) {
+      const trackerPayload = (await trackerRefresh.json()) as { plan?: Plan };
+      if (trackerPayload.plan) setPlan(trackerPayload.plan);
+    }
     setStatus("Weekly update saved. Review signal view and next actions.");
     setActiveTab("analysis");
     await loadAnalysis(userId);

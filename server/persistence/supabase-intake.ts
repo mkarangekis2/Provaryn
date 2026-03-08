@@ -12,6 +12,13 @@ export type IntakeServiceProfileInput = {
   etsDate?: string;
 };
 
+export type IntakeServiceStartInput = {
+  userId: string;
+  dateJoined: string;
+  branch?: string;
+  component?: string;
+};
+
 export type IntakeTimelineInput = {
   userId: string;
   entryType: string;
@@ -109,6 +116,57 @@ export async function addTimelineEntrySupabase(input: IntakeTimelineInput) {
     endDate: result.data.end_date ?? undefined,
     metadata: (result.data.metadata as Record<string, unknown>) ?? {}
   };
+}
+
+export async function upsertServiceStartTimelineSupabase(input: IntakeServiceStartInput) {
+  await ensureSupabaseProfile(input.userId);
+  const supabase = createServiceSupabaseClient();
+
+  const existing = await supabase
+    .from("service_timeline_entries")
+    .select("id")
+    .eq("user_id", input.userId)
+    .eq("entry_type", "service_start")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing.error) throw existing.error;
+
+  if (existing.data?.id) {
+    const updated = await supabase
+      .from("service_timeline_entries")
+      .update({
+        title: "Entered military service",
+        start_date: input.dateJoined,
+        metadata: {
+          branch: input.branch ?? null,
+          component: input.component ?? null
+        }
+      })
+      .eq("id", existing.data.id)
+      .select("id")
+      .single();
+    if (updated.error) throw updated.error;
+    return { id: updated.data.id };
+  }
+
+  const inserted = await supabase
+    .from("service_timeline_entries")
+    .insert({
+      user_id: input.userId,
+      entry_type: "service_start",
+      title: "Entered military service",
+      start_date: input.dateJoined,
+      metadata: {
+        branch: input.branch ?? null,
+        component: input.component ?? null
+      }
+    })
+    .select("id")
+    .single();
+  if (inserted.error) throw inserted.error;
+  return { id: inserted.data.id };
 }
 
 export async function addEventLogSupabase(input: IntakeEventInput) {

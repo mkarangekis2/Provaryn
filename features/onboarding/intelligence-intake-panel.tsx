@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { BrainCircuit, CalendarRange, ClipboardCheck, Plus, Sparkles, Stethoscope, Trash2 } from "lucide-react";
@@ -138,6 +138,40 @@ function defaultValues(): IntakeFormValues {
   };
 }
 
+function computeYearsServedFromDates(input: {
+  dateJoined?: string;
+  currentStatus?: string;
+  etsDate?: string;
+}) {
+  if (!input.dateJoined) return null;
+  const joined = new Date(`${input.dateJoined}T00:00:00`);
+  if (Number.isNaN(joined.getTime())) return null;
+
+  const now = new Date();
+  let end = now;
+  if (input.etsDate) {
+    const ets = new Date(`${input.etsDate}T00:00:00`);
+    if (!Number.isNaN(ets.getTime()) && ets <= now) {
+      end = ets;
+    }
+  }
+
+  const status = (input.currentStatus ?? "").toLowerCase();
+  if ((status.includes("retired") || status.includes("separated") || status.includes("veteran")) && input.etsDate) {
+    const ets = new Date(`${input.etsDate}T00:00:00`);
+    if (!Number.isNaN(ets.getTime())) {
+      end = ets <= now ? ets : now;
+    }
+  }
+
+  if (end < joined) return 0;
+  const yearDiff = end.getFullYear() - joined.getFullYear();
+  const anniversaryPassed =
+    end.getMonth() > joined.getMonth() ||
+    (end.getMonth() === joined.getMonth() && end.getDate() >= joined.getDate());
+  return Math.max(0, anniversaryPassed ? yearDiff : yearDiff - 1);
+}
+
 export function OnboardingIntelligenceIntakePanel() {
   const [userId, setUserId] = useState("");
   const [status, setStatus] = useState("Complete the intake to generate your personalized catch-up plan.");
@@ -145,6 +179,8 @@ export function OnboardingIntelligenceIntakePanel() {
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [plan, setPlan] = useState<TransitionPlan | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [checkingOnboardingStatus, setCheckingOnboardingStatus] = useState(true);
+  const [onboardingAlreadyComplete, setOnboardingAlreadyComplete] = useState(false);
   const [warning, setWarning] = useState<string>("");
 
   const form = useForm<IntakeFormValues>({
@@ -156,10 +192,39 @@ export function OnboardingIntelligenceIntakePanel() {
     control: form.control,
     name: "timeline.deployments"
   });
+  const watchedJoinedDate = useWatch({ control: form.control, name: "serviceProfile.dateJoined" });
+  const watchedCurrentStatus = useWatch({ control: form.control, name: "serviceProfile.currentStatus" });
+  const watchedEtsDate = useWatch({ control: form.control, name: "serviceProfile.etsDate" });
 
   useEffect(() => {
-    const id = getOrCreateClientUserId();
-    setUserId(id);
+    async function init() {
+      const id = getOrCreateClientUserId();
+      setUserId(id);
+      if (!id) {
+        setCheckingOnboardingStatus(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/onboarding/status?userId=${encodeURIComponent(id)}`);
+        if (!response.ok) {
+          setCheckingOnboardingStatus(false);
+          return;
+        }
+        const payload = (await response.json()) as { ok: boolean; hasServiceProfile?: boolean };
+        if (payload.ok && payload.hasServiceProfile) {
+          setOnboardingAlreadyComplete(true);
+          setStatus("Onboarding is already complete. Redirecting to dashboard...");
+          setTimeout(() => {
+            window.location.assign("/home");
+          }, 600);
+        }
+      } finally {
+        setCheckingOnboardingStatus(false);
+      }
+    }
+
+    void init();
   }, []);
 
   useEffect(() => {
@@ -167,6 +232,19 @@ export function OnboardingIntelligenceIntakePanel() {
       void loadPlan(userId);
     }
   }, [activeTab, userId]);
+
+  useEffect(() => {
+    const calculated = computeYearsServedFromDates({
+      dateJoined: watchedJoinedDate,
+      currentStatus: watchedCurrentStatus,
+      etsDate: watchedEtsDate
+    });
+    if (calculated === null) return;
+    const current = form.getValues("serviceProfile.yearsServed");
+    if (current !== calculated) {
+      form.setValue("serviceProfile.yearsServed", calculated, { shouldDirty: true, shouldTouch: true });
+    }
+  }, [watchedJoinedDate, watchedCurrentStatus, watchedEtsDate, form]);
 
   const completionPct = useMemo(() => {
     if (!plan?.tasks?.length) return 0;
@@ -241,8 +319,27 @@ export function OnboardingIntelligenceIntakePanel() {
     setAnalysis(payload.analysis);
     setPlan(payload.transitionPlan);
     setWarning(payload.warning ?? "");
-    setStatus("AI analysis complete. Review your breakdown and start the tracker.");
-    setActiveTab("analysis");
+    setStatus("Onboarding complete. Redirecting to dashboard...");
+    setTimeout(() => {
+      window.location.assign("/home");
+    }, 900);
+  }
+
+  if (checkingOnboardingStatus) {
+    return (
+      <Card className="p-6">
+        <p className="text-sm text-muted">Checking onboarding status...</p>
+      </Card>
+    );
+  }
+
+  if (onboardingAlreadyComplete) {
+    return (
+      <Card className="p-6">
+        <h1 className="text-2xl font-display">Onboarding Complete</h1>
+        <p className="text-sm text-muted mt-2">You only complete onboarding once. Sending you to your dashboard now.</p>
+      </Card>
+    );
   }
 
   return (
@@ -304,8 +401,8 @@ export function OnboardingIntelligenceIntakePanel() {
                 <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" placeholder="11B, 3P0X1, HM, etc." {...form.register("serviceProfile.mos")} />
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-muted">Total years served</p>
-                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" type="number" min={0} max={60} {...form.register("serviceProfile.yearsServed")} />
+                <p className="text-xs text-muted">Total years served (auto-calculated)</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" type="number" min={0} max={60} readOnly {...form.register("serviceProfile.yearsServed")} />
               </div>
               <div className="space-y-1 md:col-span-2">
                 <p className="text-xs text-muted">Current status</p>
