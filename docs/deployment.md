@@ -12,6 +12,7 @@
   - `db/migrations/0001_init_schema.sql`
   - `db/migrations/0002_settings_and_claimbuilder_extensions.sql`
   - `db/migrations/0003_transition_task_extensions.sql`
+  - `db/migrations/0004_analytics_events.sql`
 
 ## 3. App Validation
 - `npm run typecheck`

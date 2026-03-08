@@ -36,6 +36,7 @@ Production-oriented Next.js + Supabase platform for military career intelligence
 - Migration: `db/migrations/0001_init_schema.sql`
 - Migration: `db/migrations/0002_settings_and_claimbuilder_extensions.sql`
 - Migration: `db/migrations/0003_transition_task_extensions.sql`
+- Migration: `db/migrations/0004_analytics_events.sql`
 - Seed: `db/seeds/seed.sql`
 - Storage buckets created by migration:
   - `medical-records`
