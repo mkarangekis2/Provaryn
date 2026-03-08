@@ -1,22 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { hasSessionCookie, isProtectedPath } from "@/server/guards/route-protection";
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { isProtectedPath } from "@/server/guards/route-protection";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const requiresAuth = isProtectedPath(pathname);
-  const hasSession = hasSessionCookie({
-    "sb-access-token": request.cookies.get("sb-access-token")?.value,
-    "sb:token": request.cookies.get("sb:token")?.value
-  });
+  const response = NextResponse.next();
+  const supabase = createMiddlewareClient({ req: request, res: response });
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
 
-  if (requiresAuth && !hasSession) {
+  if (requiresAuth && !session) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
