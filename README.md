@@ -8,7 +8,7 @@ Production-oriented Next.js + Supabase platform for military career intelligence
 - Tailwind + premium dark design tokens
 - Supabase (Auth, Postgres, Storage, RLS)
 - OpenAI via centralized structured AI service layer
-- Stripe billing scaffolding
+- Stripe billing integration (checkout + webhook event handling)
 - Vitest tests
 
 ## Architecture
@@ -37,6 +37,8 @@ Production-oriented Next.js + Supabase platform for military career intelligence
 - Migration: `db/migrations/0002_settings_and_claimbuilder_extensions.sql`
 - Migration: `db/migrations/0003_transition_task_extensions.sql`
 - Migration: `db/migrations/0004_analytics_events.sql`
+- Migration: `db/migrations/0005_security_exports_extensions.sql`
+- Migration: `db/migrations/0006_organization_invites.sql`
 - Seed: `db/seeds/seed.sql`
 - Storage buckets created by migration:
   - `medical-records`
@@ -65,9 +67,15 @@ Production-oriented Next.js + Supabase platform for military career intelligence
 
 ## Billing
 
-- Stripe scaffolding in `services/billing-service.ts`
+- Stripe service in `services/billing-service.ts`
 - Entitlement resolver in `lib/billing/entitlements.ts`
-- Webhook endpoint scaffold: `app/api/billing/webhook/route.ts`
+- Webhook endpoint: `app/api/billing/webhook/route.ts`
+
+## Program Admin
+
+- Org invite API: `app/api/admin/invites/route.ts`
+- Cohort analytics API: `app/api/admin/cohort/route.ts`
+- Invite + cohort management UI: `features/admin/cohort-management-panel.tsx`
 
 ## Testing
 

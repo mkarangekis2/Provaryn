@@ -13,6 +13,8 @@
   - `db/migrations/0002_settings_and_claimbuilder_extensions.sql`
   - `db/migrations/0003_transition_task_extensions.sql`
   - `db/migrations/0004_analytics_events.sql`
+  - `db/migrations/0005_security_exports_extensions.sql`
+  - `db/migrations/0006_organization_invites.sql`
 
 ## 3. App Validation
 - `npm run typecheck`
@@ -22,7 +24,7 @@
 
 ## 4. Stripe
 - Configure webhook endpoint:
-  - Production: `https://<your-domain>/api/billing/webhook`
+  - Production: `https://provaryn.vercel.app/api/billing/webhook`
   - Preview: `https://<your-preview-domain>/api/billing/webhook`
 - Set Stripe env vars:
   - `STRIPE_SECRET_KEY`
