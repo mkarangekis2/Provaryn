@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { detectConditions } from "@/services/conditions/condition-detection-service";
 import { listCheckIns, listDocumentExtractions, listEventLogs } from "@/server/mock/store";
 import {
@@ -7,14 +6,12 @@ import {
   listDocumentExtractionsSupabase,
   listEventLogsSupabase
 } from "@/server/persistence/supabase-intelligence";
-
-const schema = z.object({ userId: z.string().min(5) });
+import { requireAuthorizedQueryUser } from "@/lib/auth/request-user";
 
 export async function GET(request: NextRequest) {
-  const parsed = schema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
-
-  const userId = parsed.data.userId;
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
+  const userId = auth.userId;
   let checkIns = listCheckIns(userId);
   let events = listEventLogs(userId);
   let extractions = listDocumentExtractions(userId);

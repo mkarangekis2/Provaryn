@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { buildUserIntelligenceAsync } from "@/services/intelligence/user-intelligence-service";
-
-const schema = z.object({ userId: z.string().min(5) });
+import { hasAnyRole } from "@/lib/auth/access-scope";
+import { requireAuthorizedQueryUser } from "@/lib/auth/request-user";
 
 export async function GET(request: NextRequest) {
-  const parsed = schema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
 
-  const intel = await buildUserIntelligenceAsync(parsed.data.userId);
+  const canViewCoachScope = await hasAnyRole(auth.userId, ["coach", "program_admin", "system_admin"]);
+  if (!canViewCoachScope) {
+    return NextResponse.json({ ok: false, error: "Insufficient role for coach dashboard" }, { status: 403 });
+  }
+
+  const intel = await buildUserIntelligenceAsync(auth.userId);
   const topGaps = intel.conditions
     .filter((c) => c.diagnosisStatus === "missing" || c.readiness < 60)
     .slice(0, 4)
@@ -18,7 +22,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     users: [
       {
-        id: parsed.data.userId,
+        id: auth.userId,
         displayName: "Primary User",
         readiness: intel.score.overall,
         transitionRisk: intel.score.transitionReadiness < 65 ? "high" : intel.score.transitionReadiness < 80 ? "medium" : "low",

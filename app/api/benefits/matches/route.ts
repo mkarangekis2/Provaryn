@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { buildUserIntelligenceAsync } from "@/services/intelligence/user-intelligence-service";
+import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const schema = z.object({ userId: z.string().min(5), state: z.string().optional() });
 
@@ -19,8 +20,10 @@ export async function GET(request: NextRequest) {
   });
 
   if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedUser(request, parsed.data.userId);
+  if (!auth.ok) return auth.response;
 
-  const intel = await buildUserIntelligenceAsync(parsed.data.userId);
+  const intel = await buildUserIntelligenceAsync(auth.userId);
   const state = parsed.data.state ?? "ALL";
 
   const matches = baseBenefits

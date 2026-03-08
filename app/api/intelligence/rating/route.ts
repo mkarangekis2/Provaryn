@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { listCheckIns, listDocumentExtractions, listEventLogs } from "@/server/mock/store";
 import { detectConditions } from "@/services/conditions/condition-detection-service";
 import {
@@ -7,8 +6,7 @@ import {
   listDocumentExtractionsSupabase,
   listEventLogsSupabase
 } from "@/server/persistence/supabase-intelligence";
-
-const schema = z.object({ userId: z.string().min(5) });
+import { requireAuthorizedQueryUser } from "@/lib/auth/request-user";
 
 function estimateConditionRating(readiness: number, confidence: number) {
   const base = Math.round((readiness * 0.55) + (confidence * 100 * 0.45));
@@ -19,17 +17,17 @@ function estimateConditionRating(readiness: number, confidence: number) {
 }
 
 export async function GET(request: NextRequest) {
-  const parsed = schema.safeParse({ userId: request.nextUrl.searchParams.get("userId") });
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
+  const auth = await requireAuthorizedQueryUser(request);
+  if (!auth.ok) return auth.response;
 
-  let checkIns = listCheckIns(parsed.data.userId);
-  let events = listEventLogs(parsed.data.userId);
-  let extractions = listDocumentExtractions(parsed.data.userId);
+  let checkIns = listCheckIns(auth.userId);
+  let events = listEventLogs(auth.userId);
+  let extractions = listDocumentExtractions(auth.userId);
   try {
     [checkIns, events, extractions] = await Promise.all([
-      listCheckInsSupabase(parsed.data.userId),
-      listEventLogsSupabase(parsed.data.userId),
-      listDocumentExtractionsSupabase(parsed.data.userId)
+      listCheckInsSupabase(auth.userId),
+      listEventLogsSupabase(auth.userId),
+      listDocumentExtractionsSupabase(auth.userId)
     ]);
   } catch {
     // fallback remains

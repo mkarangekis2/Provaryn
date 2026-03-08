@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { addAnalyticsEvent } from "@/server/mock/store";
 import { addAnalyticsEventSupabase } from "@/server/persistence/supabase-analytics";
+import { getAuthenticatedUserId, requireAuthorizedUser } from "@/lib/auth/request-user";
 
 const schema = z.object({
   name: z.enum([
@@ -26,9 +27,18 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = schema.parse(await request.json());
+    let scopedUserId: string | undefined;
+    if (body.userId) {
+      const auth = await requireAuthorizedUser(request, body.userId);
+      if (!auth.ok) return auth.response;
+      scopedUserId = auth.userId;
+    } else {
+      scopedUserId = (await getAuthenticatedUserId(request)) ?? undefined;
+    }
+
     const input = {
       id: randomUUID(),
-      userId: body.userId,
+      userId: scopedUserId,
       name: body.name,
       payload: body.payload,
       createdAt: new Date().toISOString()
