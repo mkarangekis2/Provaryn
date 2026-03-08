@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { listAuditEntries } from "@/server/mock/store";
 import { listAuditEntriesSupabase } from "@/server/persistence/supabase-settings";
 import { requireAuthorizedQueryUser } from "@/lib/auth/request-user";
 
@@ -13,7 +12,10 @@ export async function GET(request: NextRequest) {
   try {
     const logs = await listAuditEntriesSupabase(auth.userId);
     return NextResponse.json({ ok: true, logs });
-  } catch {
-    return NextResponse.json({ ok: true, logs: listAuditEntries(auth.userId) });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to list audit logs" },
+      { status: 500 }
+    );
   }
 }

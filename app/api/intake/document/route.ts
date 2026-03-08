@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
-import { addDocument, listDocuments } from "@/server/mock/store";
 import { addDocumentSupabase, listDocumentsSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
@@ -21,18 +19,15 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const payload = { ...body, userId: auth.userId };
-  let saved: ReturnType<typeof addDocument>;
   try {
-    saved = await addDocumentSupabase(payload);
-  } catch {
-    saved = addDocument({
-      id: randomUUID(),
-      createdAt: new Date().toISOString(),
-      ...payload
-    });
+    const document = await addDocumentSupabase(payload);
+    return NextResponse.json({ ok: true, document });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to create document" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ ok: true, document: saved });
 }
 
 export async function GET(request: NextRequest) {
@@ -41,7 +36,10 @@ export async function GET(request: NextRequest) {
   try {
     const documents = await listDocumentsSupabase(auth.userId);
     return NextResponse.json({ ok: true, documents });
-  } catch {
-    return NextResponse.json({ ok: true, documents: listDocuments(auth.userId) });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to list documents" },
+      { status: 500 }
+    );
   }
 }

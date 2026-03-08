@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addAuditEntry, addBillingEvent, listBillingEvents } from "@/server/mock/store";
 import { resolveEntitlements } from "@/lib/billing/entitlements";
 import {
   addAuditEntrySupabase,
@@ -21,14 +19,16 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuthorizedQueryUser(request);
   if (!auth.ok) return auth.response;
 
-  let events = listBillingEvents(auth.userId);
   try {
-    events = await listBillingEventsSupabase(auth.userId);
-  } catch {
-    // fallback to mock store
+    const events = await listBillingEventsSupabase(auth.userId);
+    const entitlements = resolveEntitlements(events.map((e) => ({ type: e.eventType, active: e.active })));
+    return NextResponse.json({ ok: true, events, entitlements });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load billing settings" },
+      { status: 500 }
+    );
   }
-  const entitlements = resolveEntitlements(events.map((e) => ({ type: e.eventType, active: e.active })));
-  return NextResponse.json({ ok: true, events, entitlements });
 }
 
 export async function POST(request: NextRequest) {
@@ -36,9 +36,8 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const userId = auth.userId;
-  let event: ReturnType<typeof addBillingEvent>;
   try {
-    event = await addBillingEventSupabase({
+    const event = await addBillingEventSupabase({
       userId,
       eventType: body.eventType,
       active: body.active,
@@ -50,24 +49,11 @@ export async function POST(request: NextRequest) {
       category: "billing",
       metadata: { eventType: body.eventType, active: body.active }
     });
-  } catch {
-    event = addBillingEvent({
-      id: randomUUID(),
-      userId,
-      eventType: body.eventType,
-      active: body.active,
-      source: "manual",
-      createdAt: new Date().toISOString()
-    });
-
-    addAuditEntry(userId, {
-      id: randomUUID(),
-      action: "billing_event_recorded",
-      category: "billing",
-      metadata: { eventType: body.eventType, active: body.active },
-      createdAt: new Date().toISOString()
-    });
+    return NextResponse.json({ ok: true, event });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to record billing event" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ ok: true, event });
 }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addCheckIn } from "@/server/mock/store";
 import { addCheckInSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
@@ -23,11 +22,13 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const payload = { ...body, userId: auth.userId };
-  let saved: ReturnType<typeof addCheckIn>;
   try {
-    saved = await addCheckInSupabase(payload);
-  } catch {
-    saved = addCheckIn(payload);
+    const session = await addCheckInSupabase(payload);
+    return NextResponse.json({ ok: true, session });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to create check-in session" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ ok: true, session: saved });
 }

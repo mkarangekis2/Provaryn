@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getNotificationPreferences, upsertNotificationPreferences } from "@/server/mock/store";
 import {
   getNotificationPreferencesSupabase,
   upsertNotificationPreferencesSupabase
@@ -22,24 +21,25 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuthorizedQueryUser(request);
   if (!auth.ok) return auth.response;
 
-  let existing = null as ReturnType<typeof getNotificationPreferences>;
   try {
-    existing = await getNotificationPreferencesSupabase(auth.userId);
-  } catch {
-    existing = null;
-  }
-  existing = existing ?? getNotificationPreferences(auth.userId) ?? upsertNotificationPreferences({
-    userId: auth.userId,
-    weeklyCheckInReminder: true,
-    transitionTaskReminder: true,
-    evidenceGapReminder: true,
-    coachUpdates: true,
-    productAnnouncements: false,
-    cadence: "weekly",
-    updatedAt: new Date().toISOString()
-  });
+    const existing = (await getNotificationPreferencesSupabase(auth.userId)) ?? await upsertNotificationPreferencesSupabase({
+      userId: auth.userId,
+      weeklyCheckInReminder: true,
+      transitionTaskReminder: true,
+      evidenceGapReminder: true,
+      coachUpdates: true,
+      productAnnouncements: false,
+      cadence: "weekly",
+      updatedAt: new Date().toISOString()
+    });
 
-  return NextResponse.json({ ok: true, preferences: existing });
+    return NextResponse.json({ ok: true, preferences: existing });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load notification settings" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -47,11 +47,13 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const payload = { ...body, userId: auth.userId };
-  let saved: ReturnType<typeof upsertNotificationPreferences>;
   try {
-    saved = await upsertNotificationPreferencesSupabase({ ...payload, updatedAt: new Date().toISOString() });
-  } catch {
-    saved = upsertNotificationPreferences({ ...payload, updatedAt: new Date().toISOString() });
+    const preferences = await upsertNotificationPreferencesSupabase({ ...payload, updatedAt: new Date().toISOString() });
+    return NextResponse.json({ ok: true, preferences });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to save notification settings" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ ok: true, preferences: saved });
 }

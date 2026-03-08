@@ -1,12 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addChatMessage, addEventLog, listChatMessages } from "@/server/mock/store";
 import { addChatMessageSupabase, listChatMessagesSupabase } from "@/server/persistence/supabase-chat";
 import { addEventLogSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
 
-const getSchema = z.object({ userId: z.string().min(5) });
 const postSchema = z.object({ userId: z.string().min(5), message: z.string().min(1) });
 
 function buildAssistantReply(input: string) {
@@ -42,8 +39,11 @@ export async function GET(request: NextRequest) {
   try {
     const messages = await listChatMessagesSupabase(auth.userId);
     return NextResponse.json({ ok: true, messages });
-  } catch {
-    return NextResponse.json({ ok: true, messages: listChatMessages(auth.userId) });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load conversation" },
+      { status: 500 }
+    );
   }
 }
 
@@ -52,43 +52,22 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const userId = auth.userId;
-  let userMessage: ReturnType<typeof addChatMessage>;
   try {
-    userMessage = await addChatMessageSupabase({
+    const userMessage = await addChatMessageSupabase({
       userId,
       role: "user",
       content: body.message
     });
-  } catch {
-    userMessage = addChatMessage(userId, {
-      id: randomUUID(),
-      role: "user",
-      content: body.message,
-      createdAt: new Date().toISOString()
-    });
-  }
 
-  const response = buildAssistantReply(body.message);
-  let assistantMessage: ReturnType<typeof addChatMessage>;
-  try {
-    assistantMessage = await addChatMessageSupabase({
+    const response = buildAssistantReply(body.message);
+    const assistantMessage = await addChatMessageSupabase({
       userId,
       role: "assistant",
       content: response.content,
       extractionPreview: response.extractionPreview
     });
-  } catch {
-    assistantMessage = addChatMessage(userId, {
-      id: randomUUID(),
-      role: "assistant",
-      content: response.content,
-      extractionPreview: response.extractionPreview,
-      createdAt: new Date().toISOString()
-    });
-  }
 
-  if (response.extractionPreview.type === "event_log") {
-    try {
+    if (response.extractionPreview.type === "event_log") {
       await addEventLogSupabase({
         userId,
         eventType: "injury",
@@ -97,17 +76,13 @@ export async function POST(request: NextRequest) {
         location: "",
         unit: ""
       });
-    } catch {
-      addEventLog({
-        userId,
-        eventType: "injury",
-        description: body.message,
-        occurredAt: new Date().toISOString(),
-        location: "",
-        unit: ""
-      });
     }
-  }
 
-  return NextResponse.json({ ok: true, userMessage, assistantMessage });
+    return NextResponse.json({ ok: true, userMessage, assistantMessage });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to process chat message" },
+      { status: 500 }
+    );
+  }
 }

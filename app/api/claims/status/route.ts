@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addAuditEntry, getClaimStatus, upsertClaimStatus } from "@/server/mock/store";
-import { randomUUID } from "node:crypto";
 import {
   addAuditEntrySupabase
 } from "@/server/persistence/supabase-settings";
@@ -24,8 +22,11 @@ export async function GET(request: NextRequest) {
   try {
     const record = await getClaimStatusSupabase(auth.userId);
     return NextResponse.json({ ok: true, record });
-  } catch {
-    return NextResponse.json({ ok: true, record: getClaimStatus(auth.userId) });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load claim status" },
+      { status: 500 }
+    );
   }
 }
 
@@ -34,9 +35,8 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const userId = auth.userId;
-  let saved: ReturnType<typeof upsertClaimStatus>;
   try {
-    saved = await upsertClaimStatusSupabase({
+    const record = await upsertClaimStatusSupabase({
       userId,
       stage: body.stage,
       notes: body.notes
@@ -47,20 +47,11 @@ export async function POST(request: NextRequest) {
       category: "data",
       metadata: { stage: body.stage, notes: body.notes ?? "" }
     });
-  } catch {
-    saved = upsertClaimStatus({
-      userId,
-      stage: body.stage,
-      notes: body.notes,
-      updatedAt: new Date().toISOString()
-    });
-    addAuditEntry(userId, {
-      id: randomUUID(),
-      action: "claim_status_updated",
-      category: "data",
-      metadata: { stage: body.stage, notes: body.notes ?? "" },
-      createdAt: new Date().toISOString()
-    });
+    return NextResponse.json({ ok: true, record });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to update claim status" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ ok: true, record: saved });
 }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { upsertServiceProfile } from "@/server/mock/store";
 import { upsertServiceProfileSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
@@ -20,11 +19,13 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const payload = { ...body, userId: auth.userId };
-  let saved: ReturnType<typeof upsertServiceProfile>;
   try {
-    saved = await upsertServiceProfileSupabase(payload);
-  } catch {
-    saved = upsertServiceProfile(payload);
+    const profile = await upsertServiceProfileSupabase(payload);
+    return NextResponse.json({ ok: true, profile });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to upsert service profile" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ ok: true, profile: saved });
 }

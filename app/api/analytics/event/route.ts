@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addAnalyticsEvent } from "@/server/mock/store";
 import { addAnalyticsEventSupabase } from "@/server/persistence/supabase-analytics";
 import { getAuthenticatedUserId, requireAuthorizedUser } from "@/lib/auth/request-user";
 
@@ -43,12 +42,7 @@ export async function POST(request: NextRequest) {
       payload: body.payload,
       createdAt: new Date().toISOString()
     };
-    let event: ReturnType<typeof addAnalyticsEvent>;
-    try {
-      event = await addAnalyticsEventSupabase(input);
-    } catch {
-      event = addAnalyticsEvent(input);
-    }
+    const event = await addAnalyticsEventSupabase(input);
     return NextResponse.json({ ok: true, event });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "invalid_event" }, { status: 400 });

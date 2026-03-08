@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addAuditEntry, getServiceProfile, upsertServiceProfile } from "@/server/mock/store";
 import { getServiceProfileSupabase, addAuditEntrySupabase } from "@/server/persistence/supabase-settings";
 import { upsertServiceProfileSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedQueryUser, requireAuthorizedUser } from "@/lib/auth/request-user";
@@ -22,24 +20,25 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuthorizedQueryUser(request);
   if (!auth.ok) return auth.response;
 
-  let profile = null as ReturnType<typeof getServiceProfile>;
   try {
-    profile = await getServiceProfileSupabase(auth.userId);
-  } catch {
-    profile = null;
-  }
-  profile = profile ?? getServiceProfile(auth.userId) ?? {
-    userId: auth.userId,
-    branch: "Army",
-    component: "Active",
-    rank: "E-5",
-    mos: "11B",
-    yearsServed: 6,
-    currentStatus: "Serving",
-    etsDate: ""
-  };
+    const profile = (await getServiceProfileSupabase(auth.userId)) ?? {
+      userId: auth.userId,
+      branch: "Army",
+      component: "Active",
+      rank: "E-5",
+      mos: "11B",
+      yearsServed: 6,
+      currentStatus: "Serving",
+      etsDate: ""
+    };
 
-  return NextResponse.json({ ok: true, profile });
+    return NextResponse.json({ ok: true, profile });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load profile settings" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -47,24 +46,19 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const payload = { ...body, userId: auth.userId };
-  let profile: ReturnType<typeof upsertServiceProfile>;
   try {
-    profile = await upsertServiceProfileSupabase(payload);
+    const profile = await upsertServiceProfileSupabase(payload);
     await addAuditEntrySupabase({
       userId: payload.userId,
       action: "profile_updated",
       category: "data",
       metadata: { branch: payload.branch, component: payload.component, rank: payload.rank }
     });
-  } catch {
-    profile = upsertServiceProfile(payload);
-    addAuditEntry(payload.userId, {
-      id: randomUUID(),
-      action: "profile_updated",
-      category: "data",
-      metadata: { branch: payload.branch, component: payload.component, rank: payload.rank },
-      createdAt: new Date().toISOString()
-    });
+    return NextResponse.json({ ok: true, profile });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to save profile settings" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ ok: true, profile });
 }

@@ -32,7 +32,9 @@ export function NarrativeStudioPanel() {
     setConditions(condPayload.conditions);
 
     if (packagePayload.claimPackage?.id) {
-      const narrativesRes = await fetch(`/api/claim-builder/narrative?packageId=${encodeURIComponent(packagePayload.claimPackage.id)}`);
+      const narrativesRes = await fetch(
+        `/api/claim-builder/narrative?userId=${encodeURIComponent(id)}&packageId=${encodeURIComponent(packagePayload.claimPackage.id)}`
+      );
       const narrativesPayload = (await narrativesRes.json()) as { narratives: Narrative[] };
       setNarratives(narrativesPayload.narratives);
     }

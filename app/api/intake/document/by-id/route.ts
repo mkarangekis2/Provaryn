@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getDocument, getDocumentExtraction } from "@/server/mock/store";
 import { getDocumentExtractionSupabase, getDocumentSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
@@ -19,16 +18,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const document = await getDocumentSupabase(userId, parsed.data.documentId);
-    if (document) {
-      const extraction = await getDocumentExtractionSupabase(parsed.data.documentId);
-      return NextResponse.json({ ok: true, document, extraction: extraction ? { ...extraction, userId } : null });
-    }
-  } catch {
-    // fallback below
+    if (!document) return NextResponse.json({ ok: false, error: "Document not found" }, { status: 404 });
+    const extraction = await getDocumentExtractionSupabase(parsed.data.documentId);
+    return NextResponse.json({ ok: true, document, extraction: extraction ? { ...extraction, userId } : null });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load document detail" },
+      { status: 500 }
+    );
   }
-
-  const document = getDocument(userId, parsed.data.documentId);
-  if (!document) return NextResponse.json({ ok: false, error: "Document not found" }, { status: 404 });
-  const extraction = getDocumentExtraction(parsed.data.documentId);
-  return NextResponse.json({ ok: true, document, extraction });
 }

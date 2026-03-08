@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { aiServices } from "@/ai/services";
-import { getDocument, getDocumentExtraction, upsertDocumentExtraction } from "@/server/mock/store";
 import {
   getDocumentExtractionSupabase,
   getDocumentSupabase,
@@ -43,63 +42,40 @@ export async function POST(request: NextRequest) {
     if (existingSupabase) {
       return NextResponse.json({ ok: true, extraction: { ...existingSupabase, userId }, cached: true });
     }
-  } catch {
-    // continue
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed checking existing extraction" },
+      { status: 500 }
+    );
   }
-
-  let document = null as Awaited<ReturnType<typeof getDocumentSupabase>> | ReturnType<typeof getDocument>;
-  try {
-    document = await getDocumentSupabase(userId, body.documentId);
-  } catch {
-    // continue
-  }
-  if (!document) {
-    document = getDocument(userId, body.documentId);
-  }
-  if (!document) return NextResponse.json({ ok: false, error: "Document not found" }, { status: 404 });
-
-  const sourceText = document.extractedFromText ?? `${document.title} ${document.docType} ${document.conditionTags.join(" ")}`;
 
   try {
-    const ai = await aiServices.documentExtractionService({ text: sourceText });
-    let extraction: ReturnType<typeof upsertDocumentExtraction>;
+    const document = await getDocumentSupabase(userId, body.documentId);
+    if (!document) return NextResponse.json({ ok: false, error: "Document not found" }, { status: 404 });
+
+    const sourceText = document.extractedFromText ?? `${document.title} ${document.docType} ${document.conditionTags.join(" ")}`;
+
     try {
+      const ai = await aiServices.documentExtractionService({ text: sourceText });
       const supabaseSaved = await upsertDocumentExtractionSupabase({
         documentId: body.documentId,
         extracted: ai.data,
         status: "pending_review"
       });
-      extraction = { ...supabaseSaved, userId };
+      return NextResponse.json({ ok: true, extraction: { ...supabaseSaved, userId }, source: "ai" });
     } catch {
-      extraction = upsertDocumentExtraction({
-        documentId: body.documentId,
-        userId,
-        extracted: ai.data,
-        status: "pending_review",
-        updatedAt: new Date().toISOString()
-      });
-    }
-
-    return NextResponse.json({ ok: true, extraction, source: "ai" });
-  } catch {
-    let extraction: ReturnType<typeof upsertDocumentExtraction>;
-    const fallback = fallbackExtraction(sourceText);
-    try {
+      const fallback = fallbackExtraction(sourceText);
       const supabaseSaved = await upsertDocumentExtractionSupabase({
         documentId: body.documentId,
         extracted: fallback,
         status: "pending_review"
       });
-      extraction = { ...supabaseSaved, userId };
-    } catch {
-      extraction = upsertDocumentExtraction({
-        documentId: body.documentId,
-        userId,
-        extracted: fallback,
-        status: "pending_review",
-        updatedAt: new Date().toISOString()
-      });
+      return NextResponse.json({ ok: true, extraction: { ...supabaseSaved, userId }, source: "fallback" });
     }
-    return NextResponse.json({ ok: true, extraction, source: "fallback" });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to extract document intelligence" },
+      { status: 500 }
+    );
   }
 }

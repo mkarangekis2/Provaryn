@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addAuditEntry, getPermissionCenter, upsertPermissionCenter } from "@/server/mock/store";
-import { randomUUID } from "node:crypto";
 import {
   addAuditEntrySupabase,
   getPermissionCenterSupabase,
@@ -22,22 +20,23 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuthorizedQueryUser(request);
   if (!auth.ok) return auth.response;
 
-  let existing = null as ReturnType<typeof getPermissionCenter>;
   try {
-    existing = await getPermissionCenterSupabase(auth.userId);
-  } catch {
-    existing = null;
-  }
-  existing = existing ?? getPermissionCenter(auth.userId) ?? upsertPermissionCenter({
-    userId: auth.userId,
-    shareReadinessWithCoach: false,
-    shareDocumentsWithCoach: false,
-    organizationAccessEnabled: false,
-    exportRequested: false,
-    updatedAt: new Date().toISOString()
-  });
+    const existing = (await getPermissionCenterSupabase(auth.userId)) ?? await upsertPermissionCenterSupabase({
+      userId: auth.userId,
+      shareReadinessWithCoach: false,
+      shareDocumentsWithCoach: false,
+      organizationAccessEnabled: false,
+      exportRequested: false,
+      updatedAt: new Date().toISOString()
+    });
 
-  return NextResponse.json({ ok: true, permissions: existing });
+    return NextResponse.json({ ok: true, permissions: existing });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load permission settings" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -45,9 +44,8 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const payload = { ...body, userId: auth.userId };
-  let saved: ReturnType<typeof upsertPermissionCenter>;
   try {
-    saved = await upsertPermissionCenterSupabase({ ...payload, updatedAt: new Date().toISOString() });
+    const permissions = await upsertPermissionCenterSupabase({ ...payload, updatedAt: new Date().toISOString() });
     await addAuditEntrySupabase({
       userId: payload.userId,
       action: "permissions_updated",
@@ -59,20 +57,11 @@ export async function POST(request: NextRequest) {
         exportRequested: payload.exportRequested
       }
     });
-  } catch {
-    saved = upsertPermissionCenter({ ...payload, updatedAt: new Date().toISOString() });
-    addAuditEntry(payload.userId, {
-      id: randomUUID(),
-      action: "permissions_updated",
-      category: "permissions",
-      metadata: {
-        shareReadinessWithCoach: payload.shareReadinessWithCoach,
-        shareDocumentsWithCoach: payload.shareDocumentsWithCoach,
-        organizationAccessEnabled: payload.organizationAccessEnabled,
-        exportRequested: payload.exportRequested
-      },
-      createdAt: new Date().toISOString()
-    });
+    return NextResponse.json({ ok: true, permissions });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to save permission settings" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ ok: true, permissions: saved });
 }

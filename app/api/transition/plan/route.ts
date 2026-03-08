@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { detectConditions } from "@/services/conditions/condition-detection-service";
 import { buildTransitionTasks } from "@/services/transition-service";
-import { getTransitionPlan, listCheckIns, listDocumentExtractions, listEventLogs, upsertTransitionPlan } from "@/server/mock/store";
 import {
   getTransitionPlanSupabase,
   upsertTransitionPlanSupabase
@@ -26,8 +25,11 @@ export async function GET(request: NextRequest) {
   try {
     const plan = await getTransitionPlanSupabase(auth.userId);
     return NextResponse.json({ ok: true, plan });
-  } catch {
-    return NextResponse.json({ ok: true, plan: getTransitionPlan(auth.userId) });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load transition plan" },
+      { status: 500 }
+    );
   }
 }
 
@@ -36,54 +38,41 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const userId = auth.userId;
-  let checkIns = listCheckIns(userId);
-  let events = listEventLogs(userId);
-  let extractions = listDocumentExtractions(userId);
   try {
-    [checkIns, events, extractions] = await Promise.all([
+    const [checkIns, events, extractions] = await Promise.all([
       listCheckInsSupabase(userId),
       listEventLogsSupabase(userId),
       listDocumentExtractionsSupabase(userId)
     ]);
-  } catch {
-    // fallback remains
-  }
 
-  const conditions = detectConditions({
-    checkIns,
-    events,
-    extractions
-  });
+    const conditions = detectConditions({
+      checkIns,
+      events,
+      extractions
+    });
 
-  const tasks = buildTransitionTasks({
-    conditions: conditions.map((condition) => ({
-      id: condition.id,
-      label: condition.label,
-      readiness: condition.readiness,
-      diagnosisStatus: condition.diagnosisStatus,
-      urgency: condition.urgency
-    }))
-  });
+    const tasks = buildTransitionTasks({
+      conditions: conditions.map((condition) => ({
+        id: condition.id,
+        label: condition.label,
+        readiness: condition.readiness,
+        diagnosisStatus: condition.diagnosisStatus,
+        urgency: condition.urgency
+      }))
+    });
 
-  let plan: ReturnType<typeof upsertTransitionPlan>;
-  try {
-    plan = await upsertTransitionPlanSupabase({
+    const plan = await upsertTransitionPlanSupabase({
       userId,
       active: true,
       targetDate: body.targetDate,
       triggeredReason: body.triggeredReason,
       tasks
     });
-  } catch {
-    plan = upsertTransitionPlan({
-      userId,
-      active: true,
-      targetDate: body.targetDate,
-      triggeredReason: body.triggeredReason,
-      tasks,
-      updatedAt: new Date().toISOString()
-    });
+    return NextResponse.json({ ok: true, plan });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to build transition plan" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ ok: true, plan });
 }

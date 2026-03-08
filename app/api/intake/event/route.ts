@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addEventLog } from "@/server/mock/store";
 import { addEventLogSupabase } from "@/server/persistence/supabase-intake";
 import { requireAuthorizedUser } from "@/lib/auth/request-user";
 
@@ -18,11 +17,13 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;
   const payload = { ...body, userId: auth.userId };
-  let saved: ReturnType<typeof addEventLog>;
   try {
-    saved = await addEventLogSupabase(payload);
-  } catch {
-    saved = addEventLog(payload);
+    const event = await addEventLogSupabase(payload);
+    return NextResponse.json({ ok: true, event });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to add event log" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ ok: true, event: saved });
 }
