@@ -1,0 +1,5 @@
+import { FeaturePage } from "@/features/layout/feature-page";
+
+export default function ForCoachesPage() {
+  return <FeaturePage title="For Coaches & Programs" subtitle="Org Enablement" description="Permission-scoped dashboards let coaches and program leads monitor readiness, prioritize interventions, and support transition preparation without exposing unauthorized user data." metrics={[{ label: "Roles", value: "Coach/Admin/User" }, { label: "Data Access", value: "Consent-Based", tone: "success" }, { label: "Cohort Analytics", value: "Built-In" }, { label: "At-Risk Alerts", value: "Enabled", tone: "warning" }]} highlights={["Coach dashboard highlights readiness score, gaps, and timeline signals.","Program dashboard summarizes cohort metrics and transition risk.","Relationship invitations and scoped access grants are auditable.","Organization-level controls preserve boundaries through RLS policies."]} />;
+}

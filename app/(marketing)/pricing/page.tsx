@@ -1,0 +1,5 @@
+import { FeaturePage } from "@/features/layout/feature-page";
+
+export default function PricingPage() {
+  return <FeaturePage title="Pricing" subtitle="Monetization" description="Flexible pricing supports individual users, premium intelligence workflows, and one-time conversion unlocks while maintaining secure entitlement checks." metrics={[{ label: "Free Tier", value: "$0" }, { label: "Reconstruction Unlock", value: "$2.99", tone: "ai" }, { label: "Premium Tier", value: "Subscription" }, { label: "Claim Builder", value: "One-Time Package" }]} highlights={["Free includes tracking, check-ins, symptom logging, and document vault foundation.","$2.99 unlock enables advanced career reconstruction report.","Premium includes evidence gap detection, strategy, scoring, and estimator.","Claim Builder package unlocks packet assembly, forms, and submission guidance."]} />;
+}

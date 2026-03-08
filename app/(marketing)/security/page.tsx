@@ -1,0 +1,5 @@
+import { FeaturePage } from "@/features/layout/feature-page";
+
+export default function SecurityPage() {
+  return <FeaturePage title="Security & Privacy" subtitle="Trust Center" description="Security controls are built around zero-trust principles, RBAC, RLS, audit logging, selective sharing, MFA readiness, and secure storage workflows." metrics={[{ label: "RLS Coverage", value: "All Core Tables", tone: "success" }, { label: "Auth", value: "Supabase" }, { label: "MFA", value: "Ready" }, { label: "Audit Trail", value: "Sensitive Actions" }]} highlights={["Role and relationship based access checks for users, coaches, and organizations.","Secure signed URL document access with policy validation.","User-managed data permissions center with revoke/export controls.","AI recommendation audit logs and explainability references."]} />;
+}

@@ -1,0 +1,5 @@
+import { FeaturePage } from "@/features/layout/feature-page";
+
+export default function HowItWorksPage() {
+  return <FeaturePage title="How It Works" subtitle="Process Design" description="Capture service and health data continuously, run AI + deterministic claim-readiness scoring, then transition into guided claim package assembly." metrics={[{ label: "Lifecycle Coverage", value: "Full-Career", tone: "ai" }, { label: "Weekly Loop", value: "2-3 min" }, { label: "AI Explainability", value: "Enabled", tone: "success" }, { label: "Process Defect Reduction", value: "Evidence Gaps" }]} highlights={["Complete onboarding to seed service profile and exposure graph.","Maintain weekly check-ins and event logs for longitudinal proof.","Upload records, review extraction, and attach evidence to conditions.","Follow Transition Mode and Claim Builder to assemble filing package."]} />;
+}
