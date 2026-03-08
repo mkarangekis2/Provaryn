@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldCheck, Sparkles, Activity } from "lucide-react";
+import { ShieldCheck, Sparkles, Activity, LogOut } from "lucide-react";
 import { primaryNav, secondaryNav } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSessionUser } from "@/lib/auth/use-session-user";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user } = useSessionUser();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const roleAwareSecondaryNav = useMemo(() => {
     const roles = user?.roles ?? [];
@@ -25,6 +28,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     return items;
   }, [user]);
+
+  async function logout() {
+    setLoggingOut(true);
+    try {
+      const supabase = createBrowserSupabaseClient();
+      await supabase.auth.signOut();
+      window.location.assign("/login");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <div className="min-h-screen grid md:grid-cols-[270px_1fr]">
@@ -71,6 +85,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="inline-flex items-center gap-1 rounded-full bg-ai/20 text-ai px-3 py-1"><Sparkles className="h-3 w-3" /> AI Active</span>
+            <Button size="sm" variant="ghost" onClick={() => void logout()} disabled={loggingOut}>
+              <LogOut className="h-3.5 w-3.5 mr-1.5" />
+              {loggingOut ? "Signing out..." : "Log Out"}
+            </Button>
           </div>
         </header>
         <main className="p-4 md:p-8">{children}</main>
