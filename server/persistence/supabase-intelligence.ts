@@ -1,6 +1,6 @@
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { ensureSupabaseProfile } from "@/server/persistence/supabase-common";
-import type { CheckInInput, DocumentExtractionInput, EventLogInput } from "@/server/mock/store";
+import type { CheckInInput, DocumentExtractionInput, EventLogInput } from "@/types/intelligence";
 
 export async function listEventLogsSupabase(userId: string): Promise<EventLogInput[]> {
   await ensureSupabaseProfile(userId);

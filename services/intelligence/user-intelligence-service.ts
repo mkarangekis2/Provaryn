@@ -1,14 +1,18 @@
-import { listCheckIns, listDocumentExtractions, listEventLogs, getUserSnapshot, getClaimStatus } from "@/server/mock/store";
 import { detectConditions } from "@/services/conditions/condition-detection-service";
 import { calculateClaimReadiness } from "@/services/readiness-service";
 import { getUserSnapshotSupabase } from "@/server/persistence/supabase-intelligence";
+import { getClaimStatusSupabase } from "@/server/persistence/supabase-transition-claims";
 
-export function buildUserIntelligence(userId: string) {
-  const snapshot = getUserSnapshot(userId);
+export async function buildUserIntelligenceAsync(userId: string) {
+  const [snapshot, claimStatus] = await Promise.all([
+    getUserSnapshotSupabase(userId),
+    getClaimStatusSupabase(userId)
+  ]);
+
   const conditions = detectConditions({
-    checkIns: listCheckIns(userId),
-    events: listEventLogs(userId),
-    extractions: listDocumentExtractions(userId)
+    checkIns: snapshot.checkIns,
+    events: snapshot.events,
+    extractions: snapshot.extractions
   });
 
   const score = calculateClaimReadiness({
@@ -26,37 +30,7 @@ export function buildUserIntelligence(userId: string) {
     snapshot,
     conditions,
     score,
-    claimStatus: getClaimStatus(userId)
+    claimStatus
   };
 }
 
-export async function buildUserIntelligenceAsync(userId: string) {
-  try {
-    const persisted = await getUserSnapshotSupabase(userId);
-    const conditions = detectConditions({
-      checkIns: persisted.checkIns,
-      events: persisted.events,
-      extractions: persisted.extractions
-    });
-
-    const score = calculateClaimReadiness({
-      symptomLogCount: persisted.counts.symptomEntries,
-      diagnosisCount: Math.max(1, Math.floor(conditions.filter((c) => c.diagnosisStatus !== "missing").length)),
-      serviceEventsLinked: persisted.counts.events,
-      exposureLinks: Math.max(1, Math.floor(persisted.counts.timelineEntries / 2)),
-      documentCount: persisted.counts.documents,
-      narrativeCount: Math.max(0, Math.floor(persisted.counts.events / 3)),
-      specialistEvaluations: Math.max(0, Math.floor(persisted.counts.checkIns / 4))
-    });
-
-    return {
-      userId,
-      snapshot: persisted,
-      conditions,
-      score,
-      claimStatus: getClaimStatus(userId)
-    };
-  } catch {
-    return buildUserIntelligence(userId);
-  }
-}

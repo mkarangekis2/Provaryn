@@ -23,12 +23,19 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuthorizedUser(request, parsed.data.userId);
   if (!auth.ok) return auth.response;
 
-  const intel = await buildUserIntelligenceAsync(auth.userId);
-  const state = parsed.data.state ?? "ALL";
+  try {
+    const intel = await buildUserIntelligenceAsync(auth.userId);
+    const state = parsed.data.state ?? "ALL";
 
-  const matches = baseBenefits
-    .filter((b) => (b.state === "ALL" || b.state === state) && intel.score.overall >= b.minReadiness)
-    .map((b) => ({ ...b, eligibilityConfidence: Math.min(0.95, 0.45 + intel.score.overall / 200) }));
+    const matches = baseBenefits
+      .filter((b) => (b.state === "ALL" || b.state === state) && intel.score.overall >= b.minReadiness)
+      .map((b) => ({ ...b, eligibilityConfidence: Math.min(0.95, 0.45 + intel.score.overall / 200) }));
 
-  return NextResponse.json({ ok: true, matches, state });
+    return NextResponse.json({ ok: true, matches, state });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load benefit matches" },
+      { status: 500 }
+    );
+  }
 }

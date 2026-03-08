@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listCheckIns, listDocumentExtractions, listEventLogs } from "@/server/mock/store";
 import { detectConditions } from "@/services/conditions/condition-detection-service";
 import {
   listCheckInsSupabase,
@@ -19,37 +18,36 @@ function estimateConditionRating(readiness: number, confidence: number) {
 export async function GET(request: NextRequest) {
   const auth = await requireAuthorizedQueryUser(request);
   if (!auth.ok) return auth.response;
-
-  let checkIns = listCheckIns(auth.userId);
-  let events = listEventLogs(auth.userId);
-  let extractions = listDocumentExtractions(auth.userId);
   try {
-    [checkIns, events, extractions] = await Promise.all([
+    const [checkIns, events, extractions] = await Promise.all([
       listCheckInsSupabase(auth.userId),
       listEventLogsSupabase(auth.userId),
       listDocumentExtractionsSupabase(auth.userId)
     ]);
-  } catch {
-    // fallback remains
+
+    const conditions = detectConditions({
+      checkIns,
+      events,
+      extractions
+    });
+
+    const perCondition = conditions.map((c) => ({ label: c.label, ...estimateConditionRating(c.readiness, c.confidence) }));
+    const expectedCombined = Math.min(100, perCondition.reduce((sum, c) => sum + c.expected, 0));
+
+    return NextResponse.json({
+      ok: true,
+      perCondition,
+      scenarios: {
+        conservative: Math.max(10, Math.round(expectedCombined * 0.7)),
+        expected: expectedCombined,
+        best: Math.min(100, Math.round(expectedCombined * 1.15))
+      },
+      disclaimer: "Estimator output is advisory and not a guaranteed VA determination."
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load rating intelligence" },
+      { status: 500 }
+    );
   }
-
-  const conditions = detectConditions({
-    checkIns,
-    events,
-    extractions
-  });
-
-  const perCondition = conditions.map((c) => ({ label: c.label, ...estimateConditionRating(c.readiness, c.confidence) }));
-  const expectedCombined = Math.min(100, perCondition.reduce((sum, c) => sum + c.expected, 0));
-
-  return NextResponse.json({
-    ok: true,
-    perCondition,
-    scenarios: {
-      conservative: Math.max(10, Math.round(expectedCombined * 0.7)),
-      expected: expectedCombined,
-      best: Math.min(100, Math.round(expectedCombined * 1.15))
-    },
-    disclaimer: "Estimator output is advisory and not a guaranteed VA determination."
-  });
 }

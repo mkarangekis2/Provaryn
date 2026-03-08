@@ -12,21 +12,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Insufficient role for admin dashboard" }, { status: 403 });
   }
 
-  const intel = await buildUserIntelligenceAsync(auth.userId);
-  const readiness = intel.score.overall;
+  try {
+    const intel = await buildUserIntelligenceAsync(auth.userId);
+    const readiness = intel.score.overall;
 
-  return NextResponse.json({
-    ok: true,
-    cohort: {
-      participantCount: 1,
-      avgReadiness: readiness,
-      atRiskCount: readiness < 65 ? 1 : 0,
-      transitionsSoon: intel.score.transitionReadiness < 70 ? 1 : 0,
-      completionMetrics: {
-        onboardingCompletion: intel.snapshot.counts.timelineEntries > 0 ? 100 : 40,
-        checkInCadence: Math.min(100, intel.snapshot.counts.checkIns * 12),
-        evidenceCoverage: intel.score.evidenceCompleteness
+    return NextResponse.json({
+      ok: true,
+      cohort: {
+        participantCount: 1,
+        avgReadiness: readiness,
+        atRiskCount: readiness < 65 ? 1 : 0,
+        transitionsSoon: intel.score.transitionReadiness < 70 ? 1 : 0,
+        completionMetrics: {
+          onboardingCompletion: intel.snapshot.counts.timelineEntries > 0 ? 100 : 40,
+          checkInCadence: Math.min(100, intel.snapshot.counts.checkIns * 12),
+          evidenceCoverage: intel.score.evidenceCompleteness
+        }
       }
-    }
-  });
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load cohort analytics" },
+      { status: 500 }
+    );
+  }
 }

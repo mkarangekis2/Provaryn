@@ -1,4 +1,4 @@
-import type { CheckInInput, DocumentExtractionInput, EventLogInput } from "@/server/mock/store";
+import type { CheckInInput, DocumentExtractionInput, EventLogInput } from "@/types/intelligence";
 
 export type DetectedCondition = {
   id: string;

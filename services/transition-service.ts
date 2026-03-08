@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { TransitionTask } from "@/server/mock/store";
+export type TransitionTask = {
+  id: string;
+  title: string;
+  rationale: string;
+  urgency: number;
+  completed: boolean;
+  relatedConditions: string[];
+};
 
 type ConditionLite = { id: string; label: string; readiness: number; diagnosisStatus: string; urgency: "low" | "medium" | "high" };
 

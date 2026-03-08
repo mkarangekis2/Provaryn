@@ -26,19 +26,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Access denied for requested user scope" }, { status: 403 });
   }
 
-  const intel = await buildUserIntelligenceAsync(parsed.data.subjectUserId);
+  try {
+    const intel = await buildUserIntelligenceAsync(parsed.data.subjectUserId);
 
-  return NextResponse.json({
-    ok: true,
-    user: {
-      id: parsed.data.subjectUserId,
-      readiness: intel.score,
-      conditionCount: intel.conditions.length,
-      urgentConditions: intel.conditions.filter((c) => c.urgency === "high"),
-      recommendations: intel.conditions
-        .filter((c) => c.readiness < 65 || c.diagnosisStatus === "missing")
-        .slice(0, 5)
-        .map((c) => `Coach follow-up: ${c.label} requires ${c.diagnosisStatus === "missing" ? "diagnosis confirmation" : "evidence strengthening"}`)
-    }
-  });
+    return NextResponse.json({
+      ok: true,
+      user: {
+        id: parsed.data.subjectUserId,
+        readiness: intel.score,
+        conditionCount: intel.conditions.length,
+        urgentConditions: intel.conditions.filter((c) => c.urgency === "high"),
+        recommendations: intel.conditions
+          .filter((c) => c.readiness < 65 || c.diagnosisStatus === "missing")
+          .slice(0, 5)
+          .map((c) => `Coach follow-up: ${c.label} requires ${c.diagnosisStatus === "missing" ? "diagnosis confirmation" : "evidence strengthening"}`)
+      }
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Failed to load coach user detail" },
+      { status: 500 }
+    );
+  }
 }
