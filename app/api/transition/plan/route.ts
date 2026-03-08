@@ -26,6 +26,11 @@ type TransitionTask = {
   urgency: number;
   completed: boolean;
   relatedConditions: string[];
+  owner?: "member" | "coach";
+  dueAt?: string;
+  impactScore?: number;
+  sourceStage?: "onboarding" | "weekly" | "transition" | "claim_builder";
+  taskType?: "evidence" | "medical_eval" | "narrative" | "records";
 };
 
 function mergeTasks(existing: TransitionTask[], generated: TransitionTask[]) {
@@ -47,7 +52,12 @@ function mergeTasks(existing: TransitionTask[], generated: TransitionTask[]) {
       ...current,
       urgency: Math.max(current.urgency, task.urgency),
       rationale: current.rationale || task.rationale,
-      relatedConditions: Array.from(new Set([...(current.relatedConditions ?? []), ...(task.relatedConditions ?? [])]))
+      relatedConditions: Array.from(new Set([...(current.relatedConditions ?? []), ...(task.relatedConditions ?? [])])),
+      owner: current.owner ?? task.owner ?? "member",
+      dueAt: current.dueAt ?? task.dueAt,
+      impactScore: Math.max(current.impactScore ?? 50, task.impactScore ?? 50),
+      sourceStage: current.sourceStage ?? task.sourceStage ?? "transition",
+      taskType: current.taskType ?? task.taskType ?? "evidence"
     });
   }
 

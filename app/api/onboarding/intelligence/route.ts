@@ -259,7 +259,12 @@ export async function POST(request: NextRequest) {
         rationale: `Onboarding: ${item.rationale} (${item.timeframe})`,
         urgency: item.urgency,
         completed: false,
-        relatedConditions: item.relatedConditions
+        relatedConditions: item.relatedConditions,
+        owner: "member",
+        dueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+        impactScore: Math.min(95, 50 + item.urgency * 8),
+        sourceStage: "onboarding",
+        taskType: "evidence"
       }))
     });
 
@@ -290,7 +295,12 @@ export async function POST(request: NextRequest) {
           rationale: `Onboarding: ${item.rationale} (${item.timeframe})`,
           urgency: item.urgency,
           completed: false,
-          relatedConditions: item.relatedConditions
+          relatedConditions: item.relatedConditions,
+          owner: "member",
+          dueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+          impactScore: Math.min(95, 50 + item.urgency * 8),
+          sourceStage: "onboarding",
+          taskType: "evidence"
         }))
       });
 

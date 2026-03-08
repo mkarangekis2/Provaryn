@@ -8,6 +8,11 @@ type TransitionTask = {
   urgency: number;
   completed: boolean;
   relatedConditions: string[];
+  owner?: "member" | "coach";
+  dueAt?: string;
+  impactScore?: number;
+  sourceStage?: "onboarding" | "weekly" | "transition" | "claim_builder";
+  taskType?: "evidence" | "medical_eval" | "narrative" | "records";
 };
 
 type TransitionPlan = {
@@ -41,7 +46,7 @@ export async function getTransitionPlanSupabase(userId: string): Promise<Transit
 
   const tasksResult = await supabase
     .from("transition_tasks")
-    .select("id, title, rationale, urgency, status, related_conditions, created_at")
+    .select("id, title, rationale, urgency, status, related_conditions, task_owner, due_at, impact_score, source_stage, task_type, created_at")
     .eq("plan_id", planResult.data.id)
     .order("created_at", { ascending: false });
 
@@ -53,7 +58,12 @@ export async function getTransitionPlanSupabase(userId: string): Promise<Transit
     rationale: task.rationale ?? "",
     urgency: task.urgency,
     completed: task.status === "done",
-    relatedConditions: (task.related_conditions as string[] | null) ?? []
+    relatedConditions: (task.related_conditions as string[] | null) ?? [],
+    owner: (task.task_owner as "member" | "coach" | null) ?? "member",
+    dueAt: task.due_at ?? undefined,
+    impactScore: task.impact_score ?? 50,
+    sourceStage: (task.source_stage as TransitionTask["sourceStage"] | null) ?? "transition",
+    taskType: (task.task_type as TransitionTask["taskType"] | null) ?? "evidence"
   }));
 
   const latestTaskAt = tasksResult.data[0]?.created_at;
@@ -130,7 +140,12 @@ export async function upsertTransitionPlanSupabase(input: {
         rationale: task.rationale,
         urgency: task.urgency,
         status: task.completed ? "done" : "todo",
-        related_conditions: task.relatedConditions
+        related_conditions: task.relatedConditions,
+        task_owner: task.owner ?? "member",
+        due_at: task.dueAt ?? null,
+        impact_score: task.impactScore ?? 50,
+        source_stage: task.sourceStage ?? "transition",
+        task_type: task.taskType ?? "evidence"
       }))
     );
 

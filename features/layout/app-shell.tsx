@@ -45,10 +45,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     const allowedByStage: Record<JourneyStage, string[]> = {
       intake: ["/home"],
       baseline: ["/home", "/check-in"],
-      action_queue: ["/home", "/check-in", "/vault", "/conditions"],
-      weekly_cadence: ["/home", "/check-in", "/vault", "/conditions", "/claim-intelligence"],
-      transition: ["/home", "/check-in", "/vault", "/conditions", "/claim-intelligence", "/transition"],
-      claim_builder: ["/home", "/check-in", "/vault", "/conditions", "/claim-intelligence", "/transition", "/claim-builder"]
+      action_queue: ["/home", "/action-queue", "/check-in", "/vault", "/conditions"],
+      weekly_cadence: ["/home", "/action-queue", "/check-in", "/vault", "/conditions", "/claim-intelligence"],
+      transition: ["/home", "/action-queue", "/check-in", "/vault", "/conditions", "/claim-intelligence", "/transition"],
+      claim_builder: ["/home", "/action-queue", "/check-in", "/vault", "/conditions", "/claim-intelligence", "/transition", "/claim-builder"]
     };
     const allowed = allowedByStage[stage] ?? allowedByStage.intake;
     return primaryNav.filter((item) => allowed.includes(item.href));
