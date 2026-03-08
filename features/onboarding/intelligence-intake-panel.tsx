@@ -281,15 +281,40 @@ export function OnboardingIntelligenceIntakePanel() {
         <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
           <Card className="p-6 space-y-4">
             <h2 className="font-display text-xl">1. Service Profile</h2>
+            <p className="text-xs text-muted">Enter your official military identity and timeline anchors. These drive ETS timing, exposure mapping, and service-connection analysis.</p>
             <div className="grid md:grid-cols-3 gap-3">
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2" type="date" {...form.register("serviceProfile.dateJoined")} />
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2" placeholder="Branch" {...form.register("serviceProfile.branch")} />
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2" placeholder="Component" {...form.register("serviceProfile.component")} />
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2" placeholder="Rank" {...form.register("serviceProfile.rank")} />
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2" placeholder="MOS / AFSC / Rate" {...form.register("serviceProfile.mos")} />
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2" type="number" min={0} max={60} {...form.register("serviceProfile.yearsServed")} />
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2 md:col-span-2" placeholder="Current status (Active, Guard, Reserve, Transitioning)" {...form.register("serviceProfile.currentStatus")} />
-              <input className="rounded-xl bg-panel2 border border-border px-3 py-2" type="date" {...form.register("serviceProfile.etsDate")} />
+              <div className="space-y-1">
+                <p className="text-xs text-muted">Date joined service</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" type="date" {...form.register("serviceProfile.dateJoined")} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted">Branch (Army, Navy, etc.)</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" placeholder="Branch" {...form.register("serviceProfile.branch")} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted">Component</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" placeholder="Active, Guard, Reserve" {...form.register("serviceProfile.component")} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted">Rank at present</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" placeholder="Rank" {...form.register("serviceProfile.rank")} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted">MOS / AFSC / Rate</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" placeholder="11B, 3P0X1, HM, etc." {...form.register("serviceProfile.mos")} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted">Total years served</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" type="number" min={0} max={60} {...form.register("serviceProfile.yearsServed")} />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <p className="text-xs text-muted">Current status</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" placeholder="Serving, Transitioning, Retiring soon" {...form.register("serviceProfile.currentStatus")} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted">ETS / retirement date</p>
+                <input className="rounded-xl bg-panel2 border border-border px-3 py-2 w-full" type="date" {...form.register("serviceProfile.etsDate")} />
+              </div>
             </div>
           </Card>
 
@@ -306,6 +331,7 @@ export function OnboardingIntelligenceIntakePanel() {
                 Add Deployment
               </Button>
             </div>
+            <p className="text-xs text-muted">Add each deployment or operational period. Use approximate dates if exact dates are unavailable.</p>
             <div className="space-y-3">
               {deployments.fields.map((field, index) => (
                 <div key={field.id} className="grid md:grid-cols-5 gap-3 rounded-xl border border-border p-3 bg-panel2/60">
@@ -336,6 +362,7 @@ export function OnboardingIntelligenceIntakePanel() {
 
           <Card className="p-6 space-y-4">
             <h2 className="font-display text-xl">3. Exposure Mapping (Structured + Clarification)</h2>
+            <p className="text-xs text-muted">Choose exposure confidence and add context like unit, duty type, frequency, and known incidents.</p>
             <div className="space-y-3">
               {exposureKeys.map((key) => (
                 <div key={key} className="grid md:grid-cols-[220px_180px_1fr] gap-3 items-start rounded-xl border border-border p-3 bg-panel2/50">
@@ -354,6 +381,7 @@ export function OnboardingIntelligenceIntakePanel() {
 
           <Card className="p-6 space-y-4">
             <h2 className="font-display text-xl">4. Head-to-Toe Health Questionnaire</h2>
+            <p className="text-xs text-muted">Track what occurred this week, severity, functional impact, and whether medical care was sought.</p>
             <div className="space-y-3">
               {symptomCategories.map((category, index) => (
                 <div key={category} className="grid md:grid-cols-[200px_140px_120px_140px_140px_1fr] gap-3 rounded-xl border border-border p-3 bg-panel2/50">
