@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildUserIntelligenceAsync } from "@/services/intelligence/user-intelligence-service";
+import { listAITraceRecordsSupabase, listAuditEntriesSupabase } from "@/server/persistence/supabase-settings";
 import { requireAuthorizedQueryUser } from "@/lib/auth/request-user";
 
 export async function GET(request: NextRequest) {
@@ -7,7 +8,11 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) return auth.response;
 
   try {
-    const intel = await buildUserIntelligenceAsync(auth.userId);
+    const [intel, aiRuns, auditLogs] = await Promise.all([
+      buildUserIntelligenceAsync(auth.userId),
+      listAITraceRecordsSupabase(auth.userId),
+      listAuditEntriesSupabase(auth.userId)
+    ]);
 
     return NextResponse.json({
       ok: true,
@@ -23,8 +28,26 @@ export async function GET(request: NextRequest) {
           condition: c.label,
           confidence: c.confidence,
           evidenceSignals: c.evidenceSignals,
-          missingPieces: c.diagnosisStatus === "missing" ? ["Diagnosis confirmation"] : []
+          missingPieces: c.diagnosisStatus === "missing" ? ["Diagnosis confirmation"] : [],
+          rationale: c.evidenceSignals[0] ?? "Pattern-based condition signal detected."
         })),
+        aiTrace: aiRuns.map((run) => ({
+          id: run.id,
+          runType: run.runType,
+          promptVersion: run.promptVersion ?? "unknown",
+          model: run.model ?? process.env.OPENAI_MODEL ?? "gpt-4.1",
+          confidence: run.confidence ?? 0.5,
+          createdAt: run.createdAt,
+          keys: Object.keys(run.output).slice(0, 8)
+        })),
+        aiAuditActions: auditLogs
+          .filter((entry) => entry.category === "ai")
+          .slice(0, 10)
+          .map((entry) => ({
+            id: entry.id,
+            action: entry.action,
+            createdAt: entry.createdAt
+          })),
         limitations: [
           "AI outputs are assistive recommendations, not legal or medical advice.",
           "Final VA determinations depend on official review and complete records."

@@ -9,6 +9,8 @@ type Cohort = {
   avgReadiness: number;
   atRiskCount: number;
   transitionsSoon: number;
+  readinessDistribution: { low: number; medium: number; high: number };
+  usersNeedingIntervention: Array<{ userId: string; readiness: number; transitionReadiness: number; topCondition: string }>;
   completionMetrics: { onboardingCompletion: number; checkInCadence: number; evidenceCoverage: number };
 };
 
@@ -51,10 +53,29 @@ export function CohortManagementPanel() {
       <Card className="p-6">
         <h2 className="font-display text-xl">Operational Controls</h2>
         <ul className="mt-4 space-y-2 text-sm text-muted">
-          <li className="rounded-lg border border-border bg-panel2/50 px-3 py-2">Invite workflow: API scaffolding complete, pending org email provider + invite token table.</li>
-          <li className="rounded-lg border border-border bg-panel2/50 px-3 py-2">Cohort segmentation: organization membership and role tables are active for scoped expansion.</li>
-          <li className="rounded-lg border border-border bg-panel2/50 px-3 py-2">Program metrics: readiness, risk, and transition outputs are live from the cohort analytics endpoint.</li>
+          <li className="rounded-lg border border-border bg-panel2/50 px-3 py-2">Invite workflow: `/invite` route is active and supports code-based onboarding handoff.</li>
+          <li className="rounded-lg border border-border bg-panel2/50 px-3 py-2">Cohort segmentation: organization membership and role tables are active for scoped analytics.</li>
+          <li className="rounded-lg border border-border bg-panel2/50 px-3 py-2">Program metrics: readiness, risk, and transition outputs are aggregated across authorized cohort users.</li>
         </ul>
+      </Card>
+      <Card className="p-6">
+        <h2 className="font-display text-xl">Readiness Distribution</h2>
+        <div className="grid md:grid-cols-3 gap-3 mt-4 text-sm">
+          <div className="rounded-lg border border-border bg-panel2/50 p-3">Low (&lt;60): {cohort?.readinessDistribution.low ?? 0}</div>
+          <div className="rounded-lg border border-border bg-panel2/50 p-3">Medium (60-79): {cohort?.readinessDistribution.medium ?? 0}</div>
+          <div className="rounded-lg border border-border bg-panel2/50 p-3">High (80+): {cohort?.readinessDistribution.high ?? 0}</div>
+        </div>
+      </Card>
+      <Card className="p-6">
+        <h2 className="font-display text-xl">Intervention Queue</h2>
+        <div className="mt-4 space-y-2 text-sm text-muted">
+          {(cohort?.usersNeedingIntervention ?? []).map((row) => (
+            <div key={row.userId} className="rounded-lg border border-border bg-panel2/50 px-3 py-2">
+              {row.userId.slice(0, 8)} • readiness {row.readiness} • transition {row.transitionReadiness} • {row.topCondition}
+            </div>
+          ))}
+          {(cohort?.usersNeedingIntervention.length ?? 0) === 0 ? <p>No intervention queue items currently.</p> : null}
+        </div>
       </Card>
     </div>
   );

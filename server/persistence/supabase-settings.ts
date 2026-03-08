@@ -19,6 +19,40 @@ export type SecurityCenter = {
   updatedAt: string;
 };
 
+export type SecurityDevice = {
+  id: string;
+  userId: string;
+  label: string;
+  ipAddress?: string;
+  userAgent?: string;
+  trusted: boolean;
+  lastSeenAt: string;
+  createdAt: string;
+  revokedAt?: string;
+};
+
+export type SessionRecord = {
+  id: string;
+  userId: string;
+  sessionLabel: string;
+  ipAddress?: string;
+  userAgent?: string;
+  active: boolean;
+  lastSeenAt: string;
+  createdAt: string;
+  endedAt?: string;
+};
+
+export type AITraceRecord = {
+  id: string;
+  runType: string;
+  promptVersion?: string;
+  model?: string;
+  confidence?: number;
+  createdAt: string;
+  output: Record<string, unknown>;
+};
+
 export type NotificationPreferences = {
   userId: string;
   weeklyCheckInReminder: boolean;
@@ -239,6 +273,9 @@ export async function addBillingEventSupabase(input: {
   eventType: "reconstruction_unlock" | "premium_subscription" | "claim_builder_package";
   active: boolean;
   source: "manual" | "stripe";
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  metadata?: Record<string, unknown>;
 }) {
   await ensureSupabaseProfile(input.userId);
   const supabase = createServiceSupabaseClient();
@@ -247,8 +284,10 @@ export async function addBillingEventSupabase(input: {
     .insert({
       user_id: input.userId,
       event_type: input.eventType,
+      stripe_customer_id: input.stripeCustomerId ?? null,
+      stripe_subscription_id: input.stripeSubscriptionId ?? null,
       active: input.active,
-      metadata: { source: input.source }
+      metadata: { source: input.source, ...(input.metadata ?? {}) }
     })
     .select("id, event_type, active, created_at")
     .single();
@@ -313,5 +352,131 @@ export async function listAuditEntriesSupabase(userId: string) {
     category: (item.resource_type ?? "system") as "security" | "permissions" | "billing" | "data" | "ai" | "system",
     metadata: (item.metadata as Record<string, unknown>) ?? {},
     createdAt: item.created_at
+  }));
+}
+
+export async function listSecurityDevicesSupabase(userId: string) {
+  await ensureSupabaseProfile(userId);
+  const supabase = createServiceSupabaseClient();
+  const result = await supabase
+    .from("user_security_devices")
+    .select("id, user_id, label, ip_address, user_agent, trusted, last_seen_at, created_at, revoked_at")
+    .eq("user_id", userId)
+    .order("last_seen_at", { ascending: false })
+    .limit(20);
+
+  if (result.error) throw result.error;
+  return result.data.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    label: row.label,
+    ipAddress: row.ip_address ?? undefined,
+    userAgent: row.user_agent ?? undefined,
+    trusted: row.trusted,
+    lastSeenAt: row.last_seen_at,
+    createdAt: row.created_at,
+    revokedAt: row.revoked_at ?? undefined
+  }));
+}
+
+export async function listSessionRecordsSupabase(userId: string) {
+  await ensureSupabaseProfile(userId);
+  const supabase = createServiceSupabaseClient();
+  const result = await supabase
+    .from("user_session_records")
+    .select("id, user_id, session_label, ip_address, user_agent, active, last_seen_at, created_at, ended_at")
+    .eq("user_id", userId)
+    .order("last_seen_at", { ascending: false })
+    .limit(20);
+
+  if (result.error) throw result.error;
+  return result.data.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    sessionLabel: row.session_label,
+    ipAddress: row.ip_address ?? undefined,
+    userAgent: row.user_agent ?? undefined,
+    active: row.active,
+    lastSeenAt: row.last_seen_at,
+    createdAt: row.created_at,
+    endedAt: row.ended_at ?? undefined
+  }));
+}
+
+export async function ensureSecurityDefaultsSupabase(userId: string) {
+  await ensureSupabaseProfile(userId);
+  const supabase = createServiceSupabaseClient();
+
+  const [{ count: deviceCount }, { count: sessionCount }] = await Promise.all([
+    supabase.from("user_security_devices").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("user_session_records").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("active", true)
+  ]);
+
+  if (!deviceCount || deviceCount < 1) {
+    await supabase.from("user_security_devices").insert({
+      user_id: userId,
+      label: "Current device",
+      trusted: true,
+      ip_address: "Unknown",
+      user_agent: "Browser session",
+      last_seen_at: new Date().toISOString()
+    });
+  }
+
+  if (!sessionCount || sessionCount < 1) {
+    await supabase.from("user_session_records").insert({
+      user_id: userId,
+      session_label: "Current session",
+      active: true,
+      ip_address: "Unknown",
+      user_agent: "Web login",
+      last_seen_at: new Date().toISOString()
+    });
+  }
+}
+
+export async function revokeSecurityDeviceSupabase(userId: string, deviceId: string) {
+  const supabase = createServiceSupabaseClient();
+  const result = await supabase
+    .from("user_security_devices")
+    .update({ trusted: false, revoked_at: new Date().toISOString() })
+    .eq("id", deviceId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (result.error) throw result.error;
+}
+
+export async function endSessionRecordSupabase(userId: string, sessionId: string) {
+  const supabase = createServiceSupabaseClient();
+  const result = await supabase
+    .from("user_session_records")
+    .update({ active: false, ended_at: new Date().toISOString() })
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (result.error) throw result.error;
+}
+
+export async function listAITraceRecordsSupabase(userId: string) {
+  await ensureSupabaseProfile(userId);
+  const supabase = createServiceSupabaseClient();
+  const result = await supabase
+    .from("ai_runs")
+    .select("id, run_type, prompt_version, model, confidence, output, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (result.error) throw result.error;
+  return result.data.map((row) => ({
+    id: row.id,
+    runType: row.run_type,
+    promptVersion: row.prompt_version ?? undefined,
+    model: row.model ?? undefined,
+    confidence: row.confidence ?? undefined,
+    createdAt: row.created_at,
+    output: (row.output as Record<string, unknown>) ?? {}
   }));
 }

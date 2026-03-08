@@ -18,6 +18,18 @@ export type ClaimPackage = {
   updatedAt: string;
 };
 
+export type ExportJob = {
+  id: string;
+  userId: string;
+  claimPackageId?: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  outputFormat: "json" | "pdf" | "packet";
+  artifact: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  completedAt?: string;
+};
+
 const defaultForms: Forms = {
   profileReviewed: false,
   serviceHistoryReviewed: false,
@@ -159,4 +171,91 @@ export async function addNarrativeSupabase(input: {
     version: inserted.data.version,
     createdAt: inserted.data.created_at
   };
+}
+
+function toExportJob(row: {
+  id: string;
+  user_id: string;
+  claim_package_id: string | null;
+  status: string;
+  output_format: string;
+  artifact: unknown;
+  metadata: unknown;
+  created_at: string;
+  completed_at: string | null;
+}): ExportJob {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    claimPackageId: row.claim_package_id ?? undefined,
+    status: (row.status as ExportJob["status"]) ?? "queued",
+    outputFormat: (row.output_format as ExportJob["outputFormat"]) ?? "packet",
+    artifact: (row.artifact as Record<string, unknown>) ?? {},
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
+    createdAt: row.created_at,
+    completedAt: row.completed_at ?? undefined
+  };
+}
+
+export async function createExportJobSupabase(input: {
+  userId: string;
+  claimPackageId?: string;
+  outputFormat: ExportJob["outputFormat"];
+  metadata?: Record<string, unknown>;
+}) {
+  await ensureSupabaseProfile(input.userId);
+  const supabase = createServiceSupabaseClient();
+  const inserted = await supabase
+    .from("export_jobs")
+    .insert({
+      user_id: input.userId,
+      claim_package_id: input.claimPackageId ?? null,
+      status: "processing",
+      output_format: input.outputFormat,
+      metadata: input.metadata ?? {}
+    })
+    .select("id, user_id, claim_package_id, status, output_format, artifact, metadata, created_at, completed_at")
+    .single();
+
+  if (inserted.error) throw inserted.error;
+  return toExportJob(inserted.data);
+}
+
+export async function completeExportJobSupabase(input: {
+  userId: string;
+  exportJobId: string;
+  status: ExportJob["status"];
+  artifact: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}) {
+  const supabase = createServiceSupabaseClient();
+  const updated = await supabase
+    .from("export_jobs")
+    .update({
+      status: input.status,
+      artifact: input.artifact,
+      metadata: input.metadata ?? {},
+      completed_at: new Date().toISOString()
+    })
+    .eq("id", input.exportJobId)
+    .eq("user_id", input.userId)
+    .select("id, user_id, claim_package_id, status, output_format, artifact, metadata, created_at, completed_at")
+    .single();
+
+  if (updated.error) throw updated.error;
+  return toExportJob(updated.data);
+}
+
+export async function listExportJobsSupabase(userId: string) {
+  await ensureSupabaseProfile(userId);
+  const supabase = createServiceSupabaseClient();
+  const result = await supabase
+    .from("export_jobs")
+    .select("id, user_id, claim_package_id, status, output_format, artifact, metadata, created_at, completed_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (result.error) throw result.error;
+  return result.data.map((row) => toExportJob(row));
 }
