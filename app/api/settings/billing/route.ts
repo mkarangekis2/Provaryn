@@ -32,6 +32,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ ok: false, error: "Manual billing event triggers are disabled in production." }, { status: 403 });
+  }
+
   const body = postSchema.parse(await request.json());
   const auth = await requireAuthorizedUser(request, body.userId);
   if (!auth.ok) return auth.response;

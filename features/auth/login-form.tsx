@@ -23,7 +23,12 @@ export function LoginForm({ redirectTo = "/home" }: { redirectTo?: string }) {
       if (data.user?.id) {
         setClientUserId(data.user.id);
       }
-      window.location.assign(redirectTo);
+      const statusRes = await fetch(`/api/onboarding/status?userId=${encodeURIComponent(data.user?.id ?? "")}`);
+      const statusPayload = (await statusRes.json()) as { ok: boolean; hasServiceProfile?: boolean };
+      const target = statusPayload.ok && !statusPayload.hasServiceProfile
+        ? "/onboarding"
+        : redirectTo;
+      window.location.assign(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {

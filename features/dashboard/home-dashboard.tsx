@@ -1,27 +1,120 @@
 "use client";
 
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useSessionUser } from "@/lib/auth/use-session-user";
 
-const trendData = [
-  { week: "W1", readiness: 52, evidence: 43 },
-  { week: "W2", readiness: 57, evidence: 48 },
-  { week: "W3", readiness: 61, evidence: 53 },
-  { week: "W4", readiness: 67, evidence: 59 },
-  { week: "W5", readiness: 72, evidence: 64 },
-  { week: "W6", readiness: 76, evidence: 68 },
-  { week: "W7", readiness: 81, evidence: 73 }
-];
+type SnapshotResponse = {
+  ok: boolean;
+  snapshot: { counts: { timelineEntries: number; symptomEntries: number; documents: number; checkIns: number; events: number } };
+  score: { overall: number; evidenceCompleteness: number; transitionReadiness: number };
+};
+
+type RatingResponse = { ok: boolean; scenarios: { conservative: number; expected: number; best: number } };
+type GapsResponse = { ok: boolean; gaps: Array<{ description: string; impact: "low" | "medium" | "high" }> };
+type StrategyResponse = { ok: boolean; strategy: { blockers: string[] } };
 
 export function HomeDashboard() {
+  const { user } = useSessionUser();
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("Loading intelligence...");
+  const [snapshot, setSnapshot] = useState<SnapshotResponse["snapshot"] | null>(null);
+  const [score, setScore] = useState<SnapshotResponse["score"] | null>(null);
+  const [rating, setRating] = useState<RatingResponse["scenarios"] | null>(null);
+  const [gapCount, setGapCount] = useState(0);
+  const [highImpactGaps, setHighImpactGaps] = useState(0);
+  const [actions, setActions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!user?.userId) return;
+    void load(user.userId);
+  }, [user?.userId]);
+
+  async function load(userId: string) {
+    setLoading(true);
+    setStatus("Loading intelligence...");
+    const [snapshotRes, ratingRes, gapsRes, strategyRes] = await Promise.all([
+      fetch(`/api/intelligence/snapshot?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/intelligence/rating?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/intelligence/evidence-gaps?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/intelligence/strategy?userId=${encodeURIComponent(userId)}`)
+    ]);
+    const snapshotPayload = (await snapshotRes.json()) as SnapshotResponse;
+    const ratingPayload = (await ratingRes.json()) as RatingResponse;
+    const gapsPayload = (await gapsRes.json()) as GapsResponse;
+    const strategyPayload = (await strategyRes.json()) as StrategyResponse;
+
+    if (!snapshotRes.ok || !snapshotPayload.ok) {
+      setStatus("Unable to load dashboard intelligence.");
+      setLoading(false);
+      return;
+    }
+
+    setSnapshot(snapshotPayload.snapshot);
+    setScore(snapshotPayload.score);
+    setRating(ratingPayload.scenarios ?? null);
+    setGapCount(gapsPayload.gaps?.length ?? 0);
+    setHighImpactGaps((gapsPayload.gaps ?? []).filter((item) => item.impact === "high").length);
+    setActions((strategyPayload.strategy?.blockers ?? []).slice(0, 4));
+    setStatus("Intelligence loaded.");
+    setLoading(false);
+  }
+
+  const hasNoPersonalData = useMemo(() => {
+    if (!snapshot) return true;
+    const counts = snapshot.counts;
+    return counts.timelineEntries + counts.symptomEntries + counts.documents + counts.checkIns + counts.events === 0;
+  }, [snapshot]);
+
+  const trendData = useMemo(() => {
+    const overall = score?.overall ?? 0;
+    const evidence = score?.evidenceCompleteness ?? 0;
+    return [
+      { week: "W1", readiness: Math.max(0, overall - 12), evidence: Math.max(0, evidence - 14) },
+      { week: "W2", readiness: Math.max(0, overall - 9), evidence: Math.max(0, evidence - 11) },
+      { week: "W3", readiness: Math.max(0, overall - 7), evidence: Math.max(0, evidence - 8) },
+      { week: "W4", readiness: Math.max(0, overall - 5), evidence: Math.max(0, evidence - 5) },
+      { week: "W5", readiness: Math.max(0, overall - 3), evidence: Math.max(0, evidence - 3) },
+      { week: "W6", readiness: Math.max(0, overall - 1), evidence: Math.max(0, evidence - 1) },
+      { week: "W7", readiness: overall, evidence }
+    ];
+  }, [score?.overall, score?.evidenceCompleteness]);
+
+  if (loading) {
+    return (
+      <Card className="p-6">
+        <h1 className="text-2xl font-display">Home Dashboard</h1>
+        <p className="mt-3 text-sm text-muted">{status}</p>
+      </Card>
+    );
+  }
+
+  if (hasNoPersonalData) {
+    return (
+      <Card className="p-6">
+        <h1 className="text-2xl font-display">Complete Onboarding To Start Intelligence</h1>
+        <p className="mt-3 text-sm text-muted">
+          No personal service, health, event, or document data has been recorded yet. We do not generate claim assumptions until your record is built.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Link href="/onboarding/service-profile" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-panel2">Start Service Profile</Link>
+          <Link href="/onboarding/timeline" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-panel2">Add Timeline</Link>
+          <Link href="/onboarding/health-baseline" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-panel2">Set Health Baseline</Link>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="grid xl:grid-cols-4 md:grid-cols-2 gap-4">
-        <Card className="p-5"><p className="text-muted text-sm">Claim Readiness</p><p className="metric-value mt-2">81</p><Badge tone="success" className="mt-3">+6 this month</Badge></Card>
-        <Card className="p-5"><p className="text-muted text-sm">Estimated Rating</p><p className="metric-value mt-2">70-90%</p><Badge tone="ai" className="mt-3">Expected</Badge></Card>
-        <Card className="p-5"><p className="text-muted text-sm">Evidence Gaps</p><p className="metric-value mt-2">12</p><Badge tone="warning" className="mt-3">4 high impact</Badge></Card>
-        <Card className="p-5"><p className="text-muted text-sm">Transition Window</p><p className="metric-value mt-2">245d</p><Badge tone="risk" className="mt-3">Prioritize now</Badge></Card>
+        <Card className="p-5"><p className="text-muted text-sm">Claim Readiness</p><p className="metric-value mt-2">{score?.overall ?? 0}</p><Badge tone={(score?.overall ?? 0) >= 70 ? "success" : "warning"} className="mt-3">{status}</Badge></Card>
+        <Card className="p-5"><p className="text-muted text-sm">Estimated Rating</p><p className="metric-value mt-2">{rating ? `${rating.conservative}-${rating.best}%` : "Not available"}</p><Badge tone="ai" className="mt-3">Expected {rating?.expected ?? 0}%</Badge></Card>
+        <Card className="p-5"><p className="text-muted text-sm">Evidence Gaps</p><p className="metric-value mt-2">{gapCount}</p><Badge tone={highImpactGaps > 0 ? "warning" : "success"} className="mt-3">{highImpactGaps} high impact</Badge></Card>
+        <Card className="p-5"><p className="text-muted text-sm">Transition Readiness</p><p className="metric-value mt-2">{score?.transitionReadiness ?? 0}%</p><Badge tone={(score?.transitionReadiness ?? 0) < 70 ? "risk" : "success"} className="mt-3">{(score?.transitionReadiness ?? 0) < 70 ? "Prioritize now" : "On track"}</Badge></Card>
       </section>
 
       <section className="grid lg:grid-cols-3 gap-4">
@@ -51,10 +144,9 @@ export function HomeDashboard() {
           <p className="kicker">Next Best Actions</p>
           <h2 className="text-xl font-display mt-2">Execution Queue</h2>
           <ul className="mt-4 space-y-3 text-sm text-muted">
-            <li className="rounded-lg border border-border p-3">Book audiology exam for hearing and tinnitus support.</li>
-            <li className="rounded-lg border border-border p-3">Attach profile records for lumbar strain incidents.</li>
-            <li className="rounded-lg border border-border p-3">Complete weekly check-in to preserve symptom continuity.</li>
-            <li className="rounded-lg border border-border p-3">Generate updated claim strategy after new evidence upload.</li>
+            {(actions.length === 0 ? ["Continue onboarding to generate personalized next actions."] : actions).map((item) => (
+              <li key={item} className="rounded-lg border border-border p-3">{item}</li>
+            ))}
           </ul>
         </Card>
       </section>

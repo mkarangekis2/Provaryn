@@ -3,3 +3,7 @@ const protectedPrefixes = ["/home", "/check-in", "/events", "/chat", "/vault", "
 export function isProtectedPath(pathname: string) {
   return protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
+
+export function hasSessionCookie(cookies: Record<string, string | undefined>) {
+  return Boolean(cookies["sb-access-token"] || cookies["sb:token"]);
+}
