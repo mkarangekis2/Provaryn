@@ -11,6 +11,16 @@ type Transparency = {
   recommendationBasis: Array<{ condition: string; confidence: number; evidenceSignals: string[]; missingPieces: string[]; rationale: string }>;
   aiTrace: Array<{ id: string; runType: string; promptVersion: string; model: string; confidence: number; createdAt: string; keys: string[] }>;
   aiAuditActions: Array<{ id: string; action: string; createdAt: string }>;
+  reviewQueue: Array<{
+    id: string;
+    recommendationType: string;
+    status: "pending_review" | "confirmed" | "rejected";
+    requiresConfirmation: boolean;
+    confidence: number;
+    deterministicScore: number;
+    createdAt: string;
+    resolvedAt?: string;
+  }>;
   limitations: string[];
 };
 
@@ -34,6 +44,20 @@ export function AITransparencyPanel() {
     }
     setData(payload.transparency);
     setStatus("AI transparency data ready.");
+  }
+
+  async function resolveRecommendation(recommendationId: string, status: "confirmed" | "rejected") {
+    if (!user?.userId) return;
+    const res = await fetch("/api/ai/recommendations/queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.userId, recommendationId, status })
+    });
+    if (!res.ok) {
+      setStatus("Failed to update recommendation review status.");
+      return;
+    }
+    await load(user.userId);
   }
 
   return (
@@ -87,6 +111,47 @@ export function AITransparencyPanel() {
             </div>
           ))}
           {(data?.aiAuditActions.length ?? 0) === 0 ? <p>No AI audit actions recorded yet.</p> : null}
+        </div>
+      </Card>
+      <Card className="p-6">
+        <h2 className="font-display text-xl">Human Confirmation Queue</h2>
+        <p className="text-xs text-muted mt-2">
+          Recommendations below confidence threshold stay pending until explicitly confirmed.
+        </p>
+        <div className="mt-3 space-y-3">
+          {(data?.reviewQueue ?? []).map((item) => (
+            <div key={item.id} className="rounded-xl border border-border bg-panel2/50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold">{item.recommendationType.replace(/_/g, " ")}</p>
+                <Badge tone={item.status === "confirmed" ? "success" : item.status === "rejected" ? "risk" : "warning"}>
+                  {item.status}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted mt-2">
+                Combined {Math.round(item.confidence * 100)}% • deterministic {Math.round(item.deterministicScore * 100)}%
+              </p>
+              <p className="text-xs text-muted mt-1">{new Date(item.createdAt).toLocaleString()}</p>
+              {item.status === "pending_review" ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/25"
+                    onClick={() => void resolveRecommendation(item.id, "confirmed")}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-500/25"
+                    onClick={() => void resolveRecommendation(item.id, "rejected")}
+                  >
+                    Reject
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ))}
+          {(data?.reviewQueue.length ?? 0) === 0 ? <p className="text-sm text-muted">No recommendations in queue.</p> : null}
         </div>
       </Card>
       <Card className="p-6">

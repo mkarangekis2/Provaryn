@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { prompts } from "@/ai/prompts";
 import { onboardingIntelligenceService } from "@/ai/services";
 import { requireAuthorizedUser } from "@/lib/auth/request-user";
+import { persistAIRecommendation } from "@/services/ai/recommendation-persistence-service";
 import {
   addCheckInSupabase,
   addTimelineEntrySupabase,
@@ -279,8 +281,40 @@ export async function POST(request: NextRequest) {
         serviceConnection: condition.likelihood === "high" ? 72 : condition.likelihood === "medium" ? 58 : 44
       }))
     });
+    const evidenceSignals =
+      payload.timeline.deployments.length +
+      Object.values(payload.exposures).filter((item) => item.level !== "none").length +
+      payload.health.filter((item) => item.occurrence !== "none").length;
+    const missingItems =
+      analysis.inferredConditions.reduce((sum, condition) => sum + condition.missingEvidence.length, 0) +
+      analysis.clarifyingQuestions.length;
 
-    return NextResponse.json({ ok: true, analysis, transitionPlan });
+    const persisted = await persistAIRecommendation({
+      userId: payload.userId,
+      runType: "onboarding_intelligence",
+      promptVersion: prompts.onboardingIntelligence.version,
+      recommendationType: "onboarding_intelligence",
+      model: analysisResult.model,
+      llmConfidence: analysis.confidence ?? analysisResult.confidence,
+      payload: analysis as unknown as Record<string, unknown>,
+      inputPayload: {
+        serviceProfile: payload.serviceProfile,
+        deploymentCount: payload.timeline.deployments.length,
+        exposureCount: Object.keys(payload.exposures).length,
+        healthEntries: payload.health.length
+      },
+      evidenceSignals,
+      missingItems,
+      explanation: {
+        whatDetected: `${analysis.inferredConditions.length} inferred conditions`,
+        whyItMatters: "Onboarding intelligence drives baseline tasks and condition readiness initialization.",
+        evidenceUsed: analysis.summary,
+        missingItems: analysis.clarifyingQuestions.slice(0, 8).join(", "),
+        actionRecommended: analysis.immediatePlan.slice(0, 3).map((item) => item.title).join(", ")
+      }
+    });
+
+    return NextResponse.json({ ok: true, analysis, transitionPlan, reliability: persisted.reliability, recommendationId: persisted.recommendationId });
   } catch (error) {
     try {
       const analysis = deterministicFallback(payload);
@@ -315,10 +349,36 @@ export async function POST(request: NextRequest) {
           serviceConnection: condition.likelihood === "high" ? 72 : condition.likelihood === "medium" ? 58 : 44
         }))
       });
+      const persisted = await persistAIRecommendation({
+        userId: payload.userId,
+        runType: "onboarding_intelligence_fallback",
+        promptVersion: `${prompts.onboardingIntelligence.version}-deterministic-fallback`,
+        recommendationType: "onboarding_intelligence",
+        model: "deterministic",
+        llmConfidence: analysis.confidence,
+        payload: analysis as unknown as Record<string, unknown>,
+        inputPayload: {
+          serviceProfile: payload.serviceProfile,
+          deploymentCount: payload.timeline.deployments.length,
+          exposureCount: Object.keys(payload.exposures).length,
+          healthEntries: payload.health.length
+        },
+        evidenceSignals: payload.health.filter((item) => item.occurrence !== "none").length,
+        missingItems: analysis.clarifyingQuestions.length,
+        explanation: {
+          whatDetected: `${analysis.inferredConditions.length} inferred conditions`,
+          whyItMatters: "Fallback plan preserves deterministic progress when AI is unavailable.",
+          evidenceUsed: analysis.summary,
+          missingItems: analysis.clarifyingQuestions.slice(0, 8).join(", "),
+          actionRecommended: analysis.immediatePlan.slice(0, 3).map((item) => item.title).join(", ")
+        }
+      });
       return NextResponse.json({
         ok: true,
         analysis,
         transitionPlan,
+        reliability: persisted.reliability,
+        recommendationId: persisted.recommendationId,
         warning: error instanceof Error ? error.message : "AI unavailable, generated deterministic plan."
       });
     } catch (nestedError) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildUserIntelligenceAsync } from "@/services/intelligence/user-intelligence-service";
 import { listAITraceRecordsSupabase, listAuditEntriesSupabase } from "@/server/persistence/supabase-settings";
+import { listAIRecommendationQueueSupabase } from "@/server/persistence/supabase-ai";
 import { requireAuthorizedQueryUser } from "@/lib/auth/request-user";
 
 export async function GET(request: NextRequest) {
@@ -8,10 +9,11 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) return auth.response;
 
   try {
-    const [intel, aiRuns, auditLogs] = await Promise.all([
+    const [intel, aiRuns, auditLogs, reviewQueue] = await Promise.all([
       buildUserIntelligenceAsync(auth.userId),
       listAITraceRecordsSupabase(auth.userId),
-      listAuditEntriesSupabase(auth.userId)
+      listAuditEntriesSupabase(auth.userId),
+      listAIRecommendationQueueSupabase(auth.userId)
     ]);
 
     return NextResponse.json({
@@ -48,6 +50,16 @@ export async function GET(request: NextRequest) {
             action: entry.action,
             createdAt: entry.createdAt
           })),
+        reviewQueue: reviewQueue.map((item) => ({
+          id: item.id,
+          recommendationType: item.recommendationType,
+          status: item.status,
+          requiresConfirmation: item.requiresConfirmation,
+          confidence: item.confidence,
+          deterministicScore: item.deterministicScore,
+          createdAt: item.createdAt,
+          resolvedAt: item.resolvedAt
+        })),
         limitations: [
           "AI outputs are assistive recommendations, not legal or medical advice.",
           "Final VA determinations depend on official review and complete records."
