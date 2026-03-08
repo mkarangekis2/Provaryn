@@ -34,12 +34,22 @@ Production-oriented Next.js + Supabase platform for military career intelligence
 ## Supabase
 
 - Migration: `db/migrations/0001_init_schema.sql`
+- Migration: `db/migrations/0002_settings_and_claimbuilder_extensions.sql`
+- Migration: `db/migrations/0003_transition_task_extensions.sql`
 - Seed: `db/seeds/seed.sql`
 - Storage buckets created by migration:
   - `medical-records`
   - `user-uploads`
   - `generated-exports`
   - `statement-assets`
+
+### Hybrid persistence behavior
+
+- Intake/document APIs attempt Supabase persistence first.
+- Settings, chat, and claim-builder APIs also attempt Supabase persistence first.
+- Transition and claim-status APIs also attempt Supabase persistence first.
+- If the request user ID is not a valid authenticated Supabase user (or DB constraints fail), APIs automatically fall back to in-memory mock persistence.
+- After login/invite acceptance, the app stores the authenticated Supabase user ID locally so writes can land in Postgres.
 
 ## AI System
 

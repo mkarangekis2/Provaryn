@@ -13,5 +13,21 @@ export type AnalyticsEventName =
   | "coach_relationship_created";
 
 export function trackEvent(name: AnalyticsEventName, payload: Record<string, unknown>) {
-  console.info("analytics_event", { name, payload, at: new Date().toISOString() });
+  const body = JSON.stringify({ name, payload, userId: payload.userId });
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      const blob = new Blob([body], { type: "application/json" });
+      navigator.sendBeacon("/api/analytics/event", blob);
+      return;
+    }
+    if (typeof fetch !== "undefined") {
+      void fetch("/api/analytics/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+    }
+  } catch {
+    console.info("analytics_event_fallback", { name, payload, at: new Date().toISOString() });
+  }
 }

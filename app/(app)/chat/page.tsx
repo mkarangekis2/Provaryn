@@ -1,23 +1,5 @@
-import { FeaturePage } from "@/features/layout/feature-page";
+import { ChatAssistantPanel } from "@/features/ai/chat-assistant-panel";
 
-export default function Page() {
-  return (
-    <FeaturePage
-      title="AI Chat Assistant"
-      subtitle="Structured Capture"
-      description="Context-aware assistant that answers claim questions and converts natural language into reviewable structured records before saving."
-      metrics={[
-        { label: "Readiness Impact", value: "High", tone: "ai" },
-        { label: "Status", value: "Integrated", tone: "success" },
-        { label: "Data Integrity", value: "Validated" },
-        { label: "Next Milestone", value: "Operational" }
-      ]}
-      highlights={[
-        "Complete all required fields and save to strengthen longitudinal claim evidence.",
-        "Review AI explanations and confirm extracted structured data before persistence.",
-        "Resolve prioritized evidence gaps to improve per-condition readiness and confidence.",
-        "Track changes over time to support transition and claim submission decisions."
-      ]}
-    />
-  );
+export default function ChatPage() {
+  return <ChatAssistantPanel />;
 }

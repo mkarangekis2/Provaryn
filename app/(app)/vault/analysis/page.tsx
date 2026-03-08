@@ -1,23 +1,10 @@
-import { FeaturePage } from "@/features/layout/feature-page";
+import { DocumentAnalysisReview } from "@/features/evidence/document-analysis-review";
 
-export default function Page() {
-  return (
-    <FeaturePage
-      title="Document Analysis"
-      subtitle="Extraction Review"
-      description="Review AI-extracted provider/date/diagnosis/symptom/medication fields, edit confidence-scored candidates, then confirm into evidence records."
-      metrics={[
-        { label: "Readiness Impact", value: "High", tone: "ai" },
-        { label: "Status", value: "Integrated", tone: "success" },
-        { label: "Data Integrity", value: "Validated" },
-        { label: "Next Milestone", value: "Operational" }
-      ]}
-      highlights={[
-        "Complete all required fields and save to strengthen longitudinal claim evidence.",
-        "Review AI explanations and confirm extracted structured data before persistence.",
-        "Resolve prioritized evidence gaps to improve per-condition readiness and confidence.",
-        "Track changes over time to support transition and claim submission decisions."
-      ]}
-    />
-  );
+export default async function VaultAnalysisPage({
+  searchParams
+}: {
+  searchParams: Promise<{ documentId?: string }>;
+}) {
+  const resolved = await searchParams;
+  return <DocumentAnalysisReview initialDocumentId={resolved.documentId} />;
 }

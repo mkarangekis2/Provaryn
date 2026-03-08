@@ -1,23 +1,5 @@
-import { FeaturePage } from "@/features/layout/feature-page";
+import { BundleReviewPanel } from "@/features/claim-builder/bundle-review-panel";
 
-export default function Page() {
-  return (
-    <FeaturePage
-      title="Evidence Bundle Review"
-      subtitle="Quality Assurance"
-      description="Validate per-claim document mapping, diagnosis support, service-connection proof, and missing attachment alerts."
-      metrics={[
-        { label: "Readiness Impact", value: "High", tone: "ai" },
-        { label: "Status", value: "Integrated", tone: "success" },
-        { label: "Data Integrity", value: "Validated" },
-        { label: "Next Milestone", value: "Operational" }
-      ]}
-      highlights={[
-        "Complete all required fields and save to strengthen longitudinal claim evidence.",
-        "Review AI explanations and confirm extracted structured data before persistence.",
-        "Resolve prioritized evidence gaps to improve per-condition readiness and confidence.",
-        "Track changes over time to support transition and claim submission decisions."
-      ]}
-    />
-  );
+export default function ClaimBuilderBundleReviewPage() {
+  return <BundleReviewPanel />;
 }
