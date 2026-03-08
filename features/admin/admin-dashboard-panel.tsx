@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { getOrCreateClientUserId } from "@/lib/client-user";
+import { useSessionUser } from "@/lib/auth/use-session-user";
 
 type Cohort = {
   participantCount: number;
@@ -14,21 +14,30 @@ type Cohort = {
 
 export function AdminDashboardPanel() {
   const [cohort, setCohort] = useState<Cohort | null>(null);
+  const [status, setStatus] = useState("Loading cohort analytics...");
+  const { user } = useSessionUser();
 
   useEffect(() => {
-    const userId = getOrCreateClientUserId();
-    void load(userId);
-  }, []);
+    if (!user?.userId) return;
+    void load(user.userId);
+  }, [user?.userId]);
 
   async function load(userId: string) {
+    setStatus("Loading cohort analytics...");
     const res = await fetch(`/api/admin/cohort?userId=${encodeURIComponent(userId)}`);
-    const payload = (await res.json()) as { cohort: Cohort };
+    const payload = (await res.json()) as { ok: boolean; cohort?: Cohort; error?: string };
+    if (!res.ok || !payload.ok || !payload.cohort) {
+      setStatus(payload.error ?? "Unable to load cohort analytics.");
+      return;
+    }
     setCohort(payload.cohort);
+    setStatus("Cohort analytics ready.");
   }
 
   return (
     <div className="space-y-6">
       <Card className="p-6"><h1 className="text-3xl font-display">Program Admin Dashboard</h1></Card>
+      <p className="text-sm text-muted">{status}</p>
       <div className="grid md:grid-cols-4 gap-4">
         <Card className="p-4"><p className="text-xs text-muted">Participants</p><p className="text-2xl font-display mt-1">{cohort?.participantCount ?? "--"}</p></Card>
         <Card className="p-4"><p className="text-xs text-muted">Average Readiness</p><p className="text-2xl font-display mt-1">{cohort?.avgReadiness ?? "--"}</p></Card>

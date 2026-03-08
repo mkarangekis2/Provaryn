@@ -6,9 +6,25 @@ import { ShieldCheck, Sparkles, Activity } from "lucide-react";
 import { primaryNav, secondaryNav } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import { useMemo } from "react";
+import { useSessionUser } from "@/lib/auth/use-session-user";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { user } = useSessionUser();
+
+  const roleAwareSecondaryNav = useMemo(() => {
+    const roles = user?.roles ?? [];
+    const canCoach = roles.some((role) => role === "coach" || role === "program_admin" || role === "system_admin");
+    const canAdmin = roles.some((role) => role === "program_admin" || role === "system_admin");
+
+    const items = secondaryNav.filter((item) => (item.href === "/coach" ? canCoach : true));
+    if (canAdmin) {
+      items.push({ label: "Program Admin", href: "/admin" });
+      items.push({ label: "Cohorts", href: "/admin/cohorts" });
+    }
+    return items;
+  }, [user]);
 
   return (
     <div className="min-h-screen grid md:grid-cols-[270px_1fr]">
@@ -32,7 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav className="space-y-2">
           <p className="kicker mb-3">Secondary</p>
-          {secondaryNav.map((item) => (
+          {roleAwareSecondaryNav.map((item) => (
             <Link key={item.href} href={item.href} className={cn("flex items-center rounded-xl px-3 py-2.5 text-sm transition-colors", pathname === item.href ? "bg-panel2 text-text" : "hover:bg-panel2 text-muted hover:text-text")}>
               {item.label}
             </Link>

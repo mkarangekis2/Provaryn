@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getOrCreateClientUserId } from "@/lib/client-user";
+import { useSessionUser } from "@/lib/auth/use-session-user";
 
 type Detail = {
   readiness: { overall: number; evidenceCompleteness: number; diagnosisCoverage: number; serviceConnectionStrength: number; transitionReadiness: number };
@@ -14,21 +14,31 @@ type Detail = {
 
 export function CoachUserDetailPanel({ subjectUserId }: { subjectUserId: string }) {
   const [data, setData] = useState<Detail | null>(null);
+  const [status, setStatus] = useState("Loading user detail...");
+  const { user } = useSessionUser();
 
   useEffect(() => {
-    const userId = getOrCreateClientUserId();
-    void load(userId);
-  }, [subjectUserId]);
+    if (!user?.userId) return;
+    void load(user.userId);
+  }, [subjectUserId, user?.userId]);
 
   async function load(userId: string) {
+    setStatus("Loading user detail...");
     const res = await fetch(`/api/coach/user?userId=${encodeURIComponent(userId)}&subjectUserId=${encodeURIComponent(subjectUserId)}`);
-    const payload = (await res.json()) as { user: Detail };
+    const payload = (await res.json()) as { ok: boolean; user?: Detail; error?: string };
+    if (!res.ok || !payload.ok || !payload.user) {
+      setData(null);
+      setStatus(payload.error ?? "Unable to load user detail.");
+      return;
+    }
     setData(payload.user);
+    setStatus("User detail ready.");
   }
 
   return (
     <div className="space-y-6">
       <Card className="p-6"><h1 className="text-3xl font-display">Coach User Detail</h1><p className="text-sm text-muted mt-2">User: {subjectUserId}</p></Card>
+      <p className="text-sm text-muted">{status}</p>
       <div className="grid md:grid-cols-5 gap-4">
         <Card className="p-4"><p className="text-xs text-muted">Overall</p><p className="text-2xl font-display mt-1">{data?.readiness.overall ?? "--"}</p></Card>
         <Card className="p-4"><p className="text-xs text-muted">Evidence</p><p className="text-2xl font-display mt-1">{data?.readiness.evidenceCompleteness ?? "--"}</p></Card>
