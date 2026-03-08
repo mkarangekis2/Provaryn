@@ -13,12 +13,19 @@ import { Button } from "@/components/ui/button";
 
 type TransitionTask = { completed: boolean };
 type TransitionPlan = { active: boolean; targetDate?: string; tasks: TransitionTask[] } | null;
+type JourneyStage = "intake" | "baseline" | "action_queue" | "weekly_cadence" | "transition" | "claim_builder";
+type JourneyStatus = {
+  stage: JourneyStage;
+  stageLabel: string;
+  nextActions: Array<{ title: string; route: string }>;
+};
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user } = useSessionUser();
   const [loggingOut, setLoggingOut] = useState(false);
   const [transitionPlan, setTransitionPlan] = useState<TransitionPlan>(null);
+  const [journey, setJourney] = useState<JourneyStatus | null>(null);
 
   const roleAwareSecondaryNav = useMemo(() => {
     const roles = user?.roles ?? [];
@@ -32,6 +39,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     return items;
   }, [user]);
+
+  const stageGatedPrimaryNav = useMemo(() => {
+    const stage = journey?.stage ?? "intake";
+    const allowedByStage: Record<JourneyStage, string[]> = {
+      intake: ["/home"],
+      baseline: ["/home", "/check-in"],
+      action_queue: ["/home", "/check-in", "/vault", "/conditions"],
+      weekly_cadence: ["/home", "/check-in", "/vault", "/conditions", "/claim-intelligence"],
+      transition: ["/home", "/check-in", "/vault", "/conditions", "/claim-intelligence", "/transition"],
+      claim_builder: ["/home", "/check-in", "/vault", "/conditions", "/claim-intelligence", "/transition", "/claim-builder"]
+    };
+    const allowed = allowedByStage[stage] ?? allowedByStage.intake;
+    return primaryNav.filter((item) => allowed.includes(item.href));
+  }, [journey?.stage]);
 
   useEffect(() => {
     async function loadTransitionPlan(userId: string) {
@@ -48,6 +69,27 @@ export function AppShell({ children }: { children: ReactNode }) {
       void loadTransitionPlan(user.userId);
     } else {
       setTransitionPlan(null);
+    }
+  }, [user?.userId]);
+
+  useEffect(() => {
+    async function loadJourney(userId: string) {
+      const response = await fetch(`/api/journey/status?userId=${encodeURIComponent(userId)}`, { cache: "no-store" });
+      if (!response.ok) {
+        setJourney(null);
+        return;
+      }
+      const payload = (await response.json()) as { ok: boolean; journey?: JourneyStatus };
+      if (payload.ok && payload.journey) {
+        setJourney(payload.journey);
+      } else {
+        setJourney(null);
+      }
+    }
+    if (user?.userId) {
+      void loadJourney(user.userId);
+    } else {
+      setJourney(null);
     }
   }, [user?.userId]);
 
@@ -94,7 +136,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav className="space-y-2">
           <p className="kicker mb-3">Primary</p>
-          {primaryNav.map((item) => (
+          {stageGatedPrimaryNav.map((item) => (
             <Link key={item.href} href={item.href} className={cn("flex items-center rounded-xl px-3 py-2.5 text-sm transition-colors", pathname === item.href ? "bg-accent text-black font-semibold" : "hover:bg-panel2 text-muted hover:text-text")}>
               {item.label}
             </Link>
@@ -111,6 +153,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="mt-auto card p-4">
+          <p className="kicker">Mission Stage</p>
+          <p className="mt-2 font-semibold">{journey?.stageLabel ?? "Intake"}</p>
+          <p className="text-xs text-muted mt-2">{journey?.nextActions?.[0]?.title ?? "Complete onboarding intake."}</p>
+        </div>
+
+        <div className="card p-4">
           <p className="kicker">Transition Mode</p>
           <p className="mt-2 font-semibold">{transitionPlan?.active ? transitionDaysLabel : "Not activated yet"}</p>
           <div className="mt-3 h-2 rounded-full bg-panel2 overflow-hidden">

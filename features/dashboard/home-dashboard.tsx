@@ -16,6 +16,16 @@ type SnapshotResponse = {
 type RatingResponse = { ok: boolean; scenarios: { conservative: number; expected: number; best: number } };
 type GapsResponse = { ok: boolean; gaps: Array<{ description: string; impact: "low" | "medium" | "high" }> };
 type StrategyResponse = { ok: boolean; strategy: { blockers: string[] } };
+type JourneyResponse = {
+  ok: boolean;
+  journey: {
+    stage: string;
+    stageLabel: string;
+    gates: Array<{ key: string; current: number; target: number; passed: boolean }>;
+    defects: Array<{ type: string; label: string; impact: "low" | "medium" | "high"; route: string }>;
+    nextActions: Array<{ title: string; route: string }>;
+  };
+};
 
 export function HomeDashboard() {
   const { user } = useSessionUser();
@@ -27,6 +37,7 @@ export function HomeDashboard() {
   const [gapCount, setGapCount] = useState(0);
   const [highImpactGaps, setHighImpactGaps] = useState(0);
   const [actions, setActions] = useState<string[]>([]);
+  const [journey, setJourney] = useState<JourneyResponse["journey"] | null>(null);
 
   useEffect(() => {
     if (!user?.userId) return;
@@ -36,16 +47,18 @@ export function HomeDashboard() {
   async function load(userId: string) {
     setLoading(true);
     setStatus("Loading intelligence...");
-    const [snapshotRes, ratingRes, gapsRes, strategyRes] = await Promise.all([
+    const [snapshotRes, ratingRes, gapsRes, strategyRes, journeyRes] = await Promise.all([
       fetch(`/api/intelligence/snapshot?userId=${encodeURIComponent(userId)}`),
       fetch(`/api/intelligence/rating?userId=${encodeURIComponent(userId)}`),
       fetch(`/api/intelligence/evidence-gaps?userId=${encodeURIComponent(userId)}`),
-      fetch(`/api/intelligence/strategy?userId=${encodeURIComponent(userId)}`)
+      fetch(`/api/intelligence/strategy?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/journey/status?userId=${encodeURIComponent(userId)}`)
     ]);
     const snapshotPayload = (await snapshotRes.json()) as SnapshotResponse;
     const ratingPayload = (await ratingRes.json()) as RatingResponse;
     const gapsPayload = (await gapsRes.json()) as GapsResponse;
     const strategyPayload = (await strategyRes.json()) as StrategyResponse;
+    const journeyPayload = (await journeyRes.json()) as JourneyResponse;
 
     if (!snapshotRes.ok || !snapshotPayload.ok) {
       setStatus("Unable to load dashboard intelligence.");
@@ -58,7 +71,9 @@ export function HomeDashboard() {
     setRating(ratingPayload.scenarios ?? null);
     setGapCount(gapsPayload.gaps?.length ?? 0);
     setHighImpactGaps((gapsPayload.gaps ?? []).filter((item) => item.impact === "high").length);
-    setActions((strategyPayload.strategy?.blockers ?? []).slice(0, 4));
+    setJourney(journeyPayload.journey ?? null);
+    const journeyActions = (journeyPayload.journey?.nextActions ?? []).map((item) => item.title);
+    setActions((journeyActions.length ? journeyActions : strategyPayload.strategy?.blockers ?? []).slice(0, 4));
     setStatus("Intelligence loaded.");
     setLoading(false);
   }
@@ -114,8 +129,22 @@ export function HomeDashboard() {
         <Card className="p-5"><p className="text-muted text-sm">Claim Readiness</p><p className="metric-value mt-2">{score?.overall ?? 0}</p><Badge tone={(score?.overall ?? 0) >= 70 ? "success" : "warning"} className="mt-3">{status}</Badge></Card>
         <Card className="p-5"><p className="text-muted text-sm">Estimated Rating</p><p className="metric-value mt-2">{rating ? `${rating.conservative}-${rating.best}%` : "Not available"}</p><Badge tone="ai" className="mt-3">Expected {rating?.expected ?? 0}%</Badge></Card>
         <Card className="p-5"><p className="text-muted text-sm">Evidence Gaps</p><p className="metric-value mt-2">{gapCount}</p><Badge tone={highImpactGaps > 0 ? "warning" : "success"} className="mt-3">{highImpactGaps} high impact</Badge></Card>
-        <Card className="p-5"><p className="text-muted text-sm">Transition Readiness</p><p className="metric-value mt-2">{score?.transitionReadiness ?? 0}%</p><Badge tone={(score?.transitionReadiness ?? 0) < 70 ? "risk" : "success"} className="mt-3">{(score?.transitionReadiness ?? 0) < 70 ? "Prioritize now" : "On track"}</Badge></Card>
+        <Card className="p-5"><p className="text-muted text-sm">Mission Stage</p><p className="metric-value mt-2">{journey?.stageLabel ?? "Intake"}</p><Badge tone={(score?.transitionReadiness ?? 0) < 70 ? "risk" : "success"} className="mt-3">{(score?.transitionReadiness ?? 0) < 70 ? "Prioritize now" : "On track"}</Badge></Card>
       </section>
+
+      <Card className="p-5">
+        <p className="kicker">Stage Gates</p>
+        <h2 className="text-xl font-display mt-2">Lean CTQ Exit Criteria</h2>
+        <div className="mt-4 grid md:grid-cols-3 gap-3">
+          {(journey?.gates ?? []).map((gate) => (
+            <div key={gate.key} className="rounded-xl border border-border bg-panel2/50 p-3">
+              <p className="text-xs text-muted uppercase">{gate.key.replace(/_/g, " ")}</p>
+              <p className="font-semibold mt-1">{gate.current}% / {gate.target}%</p>
+              <Badge tone={gate.passed ? "success" : "warning"} className="mt-2">{gate.passed ? "Passed" : "Defect"}</Badge>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <section className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2 p-5">
