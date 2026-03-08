@@ -16,6 +16,7 @@ export const primaryNav: NavItem[] = [
 export const secondaryNav: NavItem[] = [
   { label: "AI Chat", href: "/chat" },
   { label: "Defects", href: "/defects" },
+  { label: "Traceability", href: "/claim-traceability" },
   { label: "Transition Mode", href: "/transition" },
   { label: "Benefits", href: "/benefits" },
   { label: "Coach Access", href: "/coach" },

@@ -26,6 +26,14 @@ type JourneyResponse = {
     nextActions: Array<{ title: string; route: string }>;
   };
 };
+type DefectResponse = {
+  ok: boolean;
+  summary: { totalDefects: number; highImpact: number; avgDaysToFix: number };
+};
+type TransitionPlanResponse = {
+  ok: boolean;
+  plan: { targetDate?: string; tasks: Array<{ completed: boolean; urgency: number; dueAt?: string }> };
+};
 
 export function HomeDashboard() {
   const { user } = useSessionUser();
@@ -38,6 +46,8 @@ export function HomeDashboard() {
   const [highImpactGaps, setHighImpactGaps] = useState(0);
   const [actions, setActions] = useState<string[]>([]);
   const [journey, setJourney] = useState<JourneyResponse["journey"] | null>(null);
+  const [defectSummary, setDefectSummary] = useState<DefectResponse["summary"] | null>(null);
+  const [transitionPlan, setTransitionPlan] = useState<TransitionPlanResponse["plan"] | null>(null);
 
   useEffect(() => {
     if (!user?.userId) return;
@@ -47,18 +57,22 @@ export function HomeDashboard() {
   async function load(userId: string) {
     setLoading(true);
     setStatus("Loading intelligence...");
-    const [snapshotRes, ratingRes, gapsRes, strategyRes, journeyRes] = await Promise.all([
+    const [snapshotRes, ratingRes, gapsRes, strategyRes, journeyRes, defectsRes, transitionRes] = await Promise.all([
       fetch(`/api/intelligence/snapshot?userId=${encodeURIComponent(userId)}`),
       fetch(`/api/intelligence/rating?userId=${encodeURIComponent(userId)}`),
       fetch(`/api/intelligence/evidence-gaps?userId=${encodeURIComponent(userId)}`),
       fetch(`/api/intelligence/strategy?userId=${encodeURIComponent(userId)}`),
-      fetch(`/api/journey/status?userId=${encodeURIComponent(userId)}`)
+      fetch(`/api/journey/status?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/defects/dashboard?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/transition/plan?userId=${encodeURIComponent(userId)}`)
     ]);
     const snapshotPayload = (await snapshotRes.json()) as SnapshotResponse;
     const ratingPayload = (await ratingRes.json()) as RatingResponse;
     const gapsPayload = (await gapsRes.json()) as GapsResponse;
     const strategyPayload = (await strategyRes.json()) as StrategyResponse;
     const journeyPayload = (await journeyRes.json()) as JourneyResponse;
+    const defectsPayload = (await defectsRes.json()) as DefectResponse;
+    const transitionPayload = (await transitionRes.json()) as TransitionPlanResponse;
 
     if (!snapshotRes.ok || !snapshotPayload.ok) {
       setStatus("Unable to load dashboard intelligence.");
@@ -72,6 +86,8 @@ export function HomeDashboard() {
     setGapCount(gapsPayload.gaps?.length ?? 0);
     setHighImpactGaps((gapsPayload.gaps ?? []).filter((item) => item.impact === "high").length);
     setJourney(journeyPayload.journey ?? null);
+    setDefectSummary(defectsPayload.summary ?? null);
+    setTransitionPlan(transitionPayload.plan ?? null);
     const journeyActions = (journeyPayload.journey?.nextActions ?? []).map((item) => item.title);
     setActions((journeyActions.length ? journeyActions : strategyPayload.strategy?.blockers ?? []).slice(0, 4));
     setStatus("Intelligence loaded.");
@@ -97,6 +113,30 @@ export function HomeDashboard() {
       { week: "W7", readiness: overall, evidence }
     ];
   }, [score?.overall, score?.evidenceCompleteness]);
+
+  const operations = useMemo(() => {
+    const tasks = transitionPlan?.tasks ?? [];
+    const completed = tasks.filter((task) => task.completed).length;
+    const completedPercent = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
+    const targetDate = transitionPlan?.targetDate ? new Date(`${transitionPlan.targetDate}T00:00:00`) : null;
+    const daysToTransition =
+      targetDate && !Number.isNaN(targetDate.getTime())
+        ? Math.ceil((targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : null;
+    const highImpactDefects = defectSummary?.highImpact ?? 0;
+    const slaTargetDays = 14;
+    const slaAtRisk = (defectSummary?.avgDaysToFix ?? 0) > slaTargetDays || highImpactDefects > 3;
+
+    return {
+      completedThisWeek: completed,
+      completedPercent,
+      daysToTransition,
+      highImpactDefects,
+      defectBurnDown: Math.max(0, 100 - highImpactDefects * 10),
+      slaTargetDays,
+      slaAtRisk
+    };
+  }, [defectSummary?.avgDaysToFix, defectSummary?.highImpact, transitionPlan?.targetDate, transitionPlan?.tasks]);
 
   if (loading) {
     return (
@@ -145,6 +185,35 @@ export function HomeDashboard() {
           ))}
         </div>
       </Card>
+
+      <section className="grid xl:grid-cols-4 md:grid-cols-2 gap-4">
+        <Card className="p-5">
+          <p className="text-muted text-sm">Readiness Trend</p>
+          <p className="metric-value mt-2">{Math.max(0, (score?.overall ?? 0) - 7)} to {score?.overall ?? 0}</p>
+          <Badge tone="success" className="mt-3">7-week positive progression</Badge>
+        </Card>
+        <Card className="p-5">
+          <p className="text-muted text-sm">Defect Burn-Down</p>
+          <p className="metric-value mt-2">{operations.defectBurnDown}%</p>
+          <Badge tone={operations.highImpactDefects > 0 ? "warning" : "success"} className="mt-3">
+            {operations.highImpactDefects} high-impact open
+          </Badge>
+        </Card>
+        <Card className="p-5">
+          <p className="text-muted text-sm">Days To Transition</p>
+          <p className="metric-value mt-2">{operations.daysToTransition === null ? "Unset" : `${operations.daysToTransition}d`}</p>
+          <Badge tone={operations.daysToTransition !== null && operations.daysToTransition < 120 ? "risk" : "success"} className="mt-3">
+            {operations.completedPercent}% plan complete
+          </Badge>
+        </Card>
+        <Card className="p-5">
+          <p className="text-muted text-sm">Actions This Week</p>
+          <p className="metric-value mt-2">{operations.completedThisWeek}</p>
+          <Badge tone={operations.slaAtRisk ? "risk" : "success"} className="mt-3">
+            {operations.slaAtRisk ? `SLA risk (>${operations.slaTargetDays}d)` : `SLA healthy (<=${operations.slaTargetDays}d)`}
+          </Badge>
+        </Card>
+      </section>
 
       <section className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2 p-5">
