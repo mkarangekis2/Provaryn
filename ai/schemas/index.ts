@@ -28,3 +28,35 @@ export const documentExtractionSchema = z.object({
   conditionTags: z.array(z.string()),
   confidence: z.number().min(0).max(1)
 });
+
+export const onboardingIntelligenceSchema = z.object({
+  summary: z.string(),
+  confidence: z.number().min(0).max(1),
+  inferredConditions: z.array(
+    z.object({
+      name: z.string(),
+      bodySystem: z.string(),
+      likelihood: z.enum(["low", "medium", "high"]),
+      why: z.string(),
+      missingEvidence: z.array(z.string()),
+      recommendedActions: z.array(z.string())
+    })
+  ),
+  exposureFindings: z.array(
+    z.object({
+      exposure: z.string(),
+      confidence: z.enum(["low", "medium", "high"]),
+      implications: z.array(z.string())
+    })
+  ),
+  immediatePlan: z.array(
+    z.object({
+      title: z.string(),
+      rationale: z.string(),
+      urgency: z.number().int().min(1).max(5),
+      timeframe: z.string(),
+      relatedConditions: z.array(z.string())
+    })
+  ),
+  clarifyingQuestions: z.array(z.string())
+});

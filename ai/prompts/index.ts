@@ -18,5 +18,10 @@ export const prompts = {
     version: "v1",
     system: "Extract structured clinical and service-relevant data from document text.",
     userTemplate: "Return normalized fields and confidence."
+  },
+  onboardingIntelligence: {
+    version: "v1",
+    system: "You are a VA claims onboarding analyst. Use provided intake only, avoid unsupported assumptions, and return action-ready outputs.",
+    userTemplate: "Analyze service, exposure, and head-to-toe symptom intake. Infer likely conditions, highlight missing evidence, and produce a prioritized catch-up plan."
   }
 } as const;

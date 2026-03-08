@@ -1,5 +1,5 @@
-import { OnboardingWelcomePanel } from "@/features/onboarding/welcome-panel";
+import { OnboardingIntelligenceIntakePanel } from "@/features/onboarding/intelligence-intake-panel";
 
 export default function OnboardingPage() {
-  return <OnboardingWelcomePanel />;
+  return <OnboardingIntelligenceIntakePanel />;
 }

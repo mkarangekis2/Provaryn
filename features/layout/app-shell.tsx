@@ -6,15 +6,19 @@ import { ShieldCheck, Sparkles, Activity, LogOut } from "lucide-react";
 import { primaryNav, secondaryNav } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSessionUser } from "@/lib/auth/use-session-user";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+
+type TransitionTask = { completed: boolean };
+type TransitionPlan = { active: boolean; targetDate?: string; tasks: TransitionTask[] } | null;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user } = useSessionUser();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [transitionPlan, setTransitionPlan] = useState<TransitionPlan>(null);
 
   const roleAwareSecondaryNav = useMemo(() => {
     const roles = user?.roles ?? [];
@@ -28,6 +32,43 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     return items;
   }, [user]);
+
+  useEffect(() => {
+    async function loadTransitionPlan(userId: string) {
+      const response = await fetch(`/api/transition/plan?userId=${encodeURIComponent(userId)}`, { cache: "no-store" });
+      if (!response.ok) {
+        setTransitionPlan(null);
+        return;
+      }
+      const payload = (await response.json()) as { ok: boolean; plan: TransitionPlan };
+      setTransitionPlan(payload.ok ? payload.plan : null);
+    }
+
+    if (user?.userId) {
+      void loadTransitionPlan(user.userId);
+    } else {
+      setTransitionPlan(null);
+    }
+  }, [user?.userId]);
+
+  const transitionDaysLabel = useMemo(() => {
+    const targetDate = transitionPlan?.targetDate;
+    if (!targetDate) return "ETS date not set";
+    const target = new Date(`${targetDate}T00:00:00`);
+    if (Number.isNaN(target.getTime())) return "ETS date unavailable";
+    const now = new Date();
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const days = Math.ceil((target.getTime() - now.getTime()) / msPerDay);
+    if (days < 0) return `ETS passed ${Math.abs(days)}d ago`;
+    return `${days} days until ETS`;
+  }, [transitionPlan?.targetDate]);
+
+  const transitionCompletion = useMemo(() => {
+    const tasks = transitionPlan?.tasks ?? [];
+    if (!tasks.length) return 0;
+    const done = tasks.filter((task) => task.completed).length;
+    return Math.round((done / tasks.length) * 100);
+  }, [transitionPlan]);
 
   async function logout() {
     setLoggingOut(true);
@@ -71,9 +112,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="mt-auto card p-4">
           <p className="kicker">Transition Mode</p>
-          <p className="mt-2 font-semibold">245 days until ETS</p>
-          <div className="mt-3 h-2 rounded-full bg-panel2 overflow-hidden"><div className="h-full w-2/3 bg-accent" /></div>
-          <p className="text-xs text-muted mt-2">Action completion 67%</p>
+          <p className="mt-2 font-semibold">{transitionPlan?.active ? transitionDaysLabel : "Not activated yet"}</p>
+          <div className="mt-3 h-2 rounded-full bg-panel2 overflow-hidden">
+            <div className="h-full bg-accent" style={{ width: `${transitionCompletion}%` }} />
+          </div>
+          <p className="text-xs text-muted mt-2">
+            Action completion {transitionCompletion}%{transitionPlan ? ` (${transitionPlan.tasks.length} tasks)` : ""}
+          </p>
         </div>
       </aside>
 
