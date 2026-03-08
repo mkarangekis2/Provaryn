@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type MfaStage = "idle" | "enrolled";
 
-export function MfaSetupPanel() {
+export function MfaSetupPanel({ redirectTo = "/home" }: { redirectTo?: string }) {
   const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState<MfaStage>("idle");
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -13,11 +13,37 @@ export function MfaSetupPanel() {
   const [verifyCode, setVerifyCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [alreadyVerified, setAlreadyVerified] = useState(false);
+  const [hasExistingFactor, setHasExistingFactor] = useState(false);
 
   const qrSrc = useMemo(() => {
     if (!qrSvg) return null;
     return qrSvg.startsWith("data:image") ? qrSvg : `data:image/svg+xml;utf8,${encodeURIComponent(qrSvg)}`;
   }, [qrSvg]);
+
+  useEffect(() => {
+    async function loadMfaState() {
+      const supabase = createBrowserSupabaseClient();
+      const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assurance.data?.currentLevel === "aal2") {
+        setAlreadyVerified(true);
+        setNotice("MFA is already verified for this session.");
+        return;
+      }
+
+      const factors = await supabase.auth.mfa.listFactors();
+      if (factors.error) return;
+      const existing = factors.data.totp[0];
+      if (existing) {
+        setFactorId(existing.id);
+        setHasExistingFactor(true);
+        setStage("enrolled");
+        setNotice("Enter a code from your existing authenticator app to complete sign-in.");
+      }
+    }
+
+    void loadMfaState();
+  }, []);
 
   async function enroll() {
     setLoading(true);
@@ -60,7 +86,8 @@ export function MfaSetupPanel() {
       });
 
       if (verified.error) throw verified.error;
-      setNotice("MFA is active for this account.");
+      setNotice("MFA verified. Redirecting...");
+      window.location.assign(redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to verify MFA code.");
     } finally {
@@ -75,7 +102,13 @@ export function MfaSetupPanel() {
       <p className="text-muted mt-3">Use authenticator-based MFA for stronger account protection before linking coach/program access.</p>
 
       <div className="mt-6 rounded-xl border border-border bg-panel2 p-4 text-sm text-muted space-y-4">
-        {stage === "idle" ? (
+        {alreadyVerified ? (
+          <button type="button" onClick={() => window.location.assign(redirectTo)} className="rounded-xl bg-accent px-4 py-2 text-black font-semibold">
+            Continue
+          </button>
+        ) : null}
+
+        {stage === "idle" && !alreadyVerified ? (
           <button disabled={loading} type="button" onClick={enroll} className="rounded-xl bg-accent px-4 py-2 text-black font-semibold disabled:opacity-60">
             {loading ? "Preparing..." : "Generate Authenticator QR"}
           </button>
@@ -97,6 +130,21 @@ export function MfaSetupPanel() {
                 {loading ? "Verifying..." : "Verify MFA"}
               </button>
             </div>
+          </div>
+        ) : null}
+
+        {stage === "enrolled" && !qrSrc ? (
+          <div className="space-y-2">
+            <p>{hasExistingFactor ? "Use your existing authenticator app code." : "Enter your authenticator app code."}</p>
+            <input
+              className="w-full rounded-xl bg-panel border border-border px-3 py-2 text-text"
+              placeholder="6-digit code"
+              value={verifyCode}
+              onChange={(e) => setVerifyCode(e.target.value)}
+            />
+            <button disabled={loading || verifyCode.trim().length < 6} type="button" onClick={verify} className="rounded-xl bg-accent px-4 py-2 text-black font-semibold disabled:opacity-60">
+              {loading ? "Verifying..." : "Verify MFA"}
+            </button>
           </div>
         ) : null}
 

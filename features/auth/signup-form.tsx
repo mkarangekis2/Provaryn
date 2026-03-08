@@ -28,26 +28,34 @@ export function SignupForm() {
     trackEvent("signup_started", { emailDomain: email.split("@")[1] ?? "unknown" });
 
     try {
-      const supabase = createBrowserSupabaseClient();
-      const redirectTo = `${window.location.origin}/login`;
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectTo,
-          data: {
-            referral_code: referralCode || null,
-            consent_sensitive_processing: true
-          }
-        }
+      const signupResponse = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          referralCode: referralCode || undefined,
+          consentSensitiveProcessing: true
+        })
       });
-      if (signUpError) throw signUpError;
-      if (data.user?.id) {
-        setClientUserId(data.user.id);
+      const signupPayload = (await signupResponse.json()) as {
+        ok: boolean;
+        error?: string;
+        user?: { id: string; email: string };
+      };
+
+      if (!signupResponse.ok || !signupPayload.ok || !signupPayload.user?.id) {
+        throw new Error(signupPayload.error ?? "Unable to create account.");
       }
 
-      trackEvent("signup_completed", { userId: data.user?.id ?? email, referralCode: referralCode || null });
-      setNotice("Account created. Check your email to verify your account before logging in.");
+      const supabase = createBrowserSupabaseClient();
+      const signIn = await supabase.auth.signInWithPassword({ email, password });
+      if (signIn.error) throw signIn.error;
+
+      setClientUserId(signupPayload.user.id);
+      trackEvent("signup_completed", { userId: signupPayload.user.id, referralCode: referralCode || null });
+      setNotice("Account created. Email confirmation is not required. Continue to MFA setup.");
+      window.location.assign("/mfa-setup?redirect=/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account.");
     } finally {
@@ -88,7 +96,7 @@ export function SignupForm() {
           I consent to secure processing of sensitive personal and health-adjacent records.
         </label>
         <button disabled={loading} type="submit" className="w-full rounded-xl bg-accent text-black py-2.5 font-semibold disabled:opacity-60">
-          {loading ? "Creating account..." : "Create Account"}
+          {loading ? "Creating account..." : "Create Account & Continue"}
         </button>
         {error ? <p className="text-sm text-risk">{error}</p> : null}
         {notice ? <p className="text-sm text-success">{notice}</p> : null}

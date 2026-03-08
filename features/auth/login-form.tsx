@@ -23,6 +23,11 @@ export function LoginForm({ redirectTo = "/home" }: { redirectTo?: string }) {
       if (data.user?.id) {
         setClientUserId(data.user.id);
       }
+      const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (!assurance.data || assurance.data.currentLevel !== "aal2") {
+        window.location.assign(`/mfa-setup?redirect=${encodeURIComponent(redirectTo)}`);
+        return;
+      }
       const statusRes = await fetch(`/api/onboarding/status?userId=${encodeURIComponent(data.user?.id ?? "")}`);
       const statusPayload = (await statusRes.json()) as { ok: boolean; hasServiceProfile?: boolean };
       const target = statusPayload.ok && !statusPayload.hasServiceProfile

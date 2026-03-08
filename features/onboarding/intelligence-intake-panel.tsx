@@ -335,18 +335,30 @@ export function OnboardingIntelligenceIntakePanel() {
             <div className="space-y-3">
               {deployments.fields.map((field, index) => (
                 <div key={field.id} className="grid md:grid-cols-5 gap-3 rounded-xl border border-border p-3 bg-panel2/60">
-                  <input className="rounded-xl bg-panel border border-border px-3 py-2 md:col-span-2" placeholder="Location / operation" {...form.register(`timeline.deployments.${index}.location`)} />
-                  <input className="rounded-xl bg-panel border border-border px-3 py-2" type="date" {...form.register(`timeline.deployments.${index}.startDate`)} />
-                  <input className="rounded-xl bg-panel border border-border px-3 py-2" type="date" {...form.register(`timeline.deployments.${index}.endDate`)} />
-                  <div className="flex gap-2">
-                    <select className="rounded-xl bg-panel border border-border px-3 py-2 w-full" {...form.register(`timeline.deployments.${index}.combatExposure`)}>
-                      <option value="none">Combat: None</option>
-                      <option value="possible">Combat: Possible</option>
-                      <option value="likely">Combat: Likely</option>
-                      <option value="confirmed">Combat: Confirmed</option>
-                    </select>
+                  <div className="md:col-span-2 space-y-1">
+                    <p className="text-[11px] text-muted">Location / operation name</p>
+                    <input className="rounded-xl bg-panel border border-border px-3 py-2 w-full" placeholder="Kandahar, CENTCOM rotation, JRTC, etc." {...form.register(`timeline.deployments.${index}.location`)} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-muted">Start date</p>
+                    <input className="rounded-xl bg-panel border border-border px-3 py-2 w-full" type="date" {...form.register(`timeline.deployments.${index}.startDate`)} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-muted">End date</p>
+                    <input className="rounded-xl bg-panel border border-border px-3 py-2 w-full" type="date" {...form.register(`timeline.deployments.${index}.endDate`)} />
+                  </div>
+                  <div className="flex gap-2 items-end">
+                    <div className="w-full space-y-1">
+                      <p className="text-[11px] text-muted">Combat exposure level</p>
+                      <select className="rounded-xl bg-panel border border-border px-3 py-2 w-full" {...form.register(`timeline.deployments.${index}.combatExposure`)}>
+                        <option value="none">Combat: None</option>
+                        <option value="possible">Combat: Possible</option>
+                        <option value="likely">Combat: Likely</option>
+                        <option value="confirmed">Combat: Confirmed</option>
+                      </select>
+                    </div>
                     {deployments.fields.length > 1 ? (
-                      <button type="button" className="rounded-xl border border-border px-2 hover:bg-panel" onClick={() => deployments.remove(index)}>
+                      <button type="button" className="rounded-xl border border-border px-2 py-2 hover:bg-panel h-[42px]" onClick={() => deployments.remove(index)}>
                         <Trash2 className="h-4 w-4" />
                       </button>
                     ) : null}
@@ -355,8 +367,14 @@ export function OnboardingIntelligenceIntakePanel() {
               ))}
             </div>
             <div className="grid md:grid-cols-2 gap-3">
-              <textarea className="rounded-xl bg-panel2 border border-border px-3 py-2 min-h-[96px]" placeholder="Schools (comma-separated)" {...form.register("timeline.schools")} />
-              <textarea className="rounded-xl bg-panel2 border border-border px-3 py-2 min-h-[96px]" placeholder="Qualifications / badges / certifications (comma-separated)" {...form.register("timeline.qualifications")} />
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted">Schools attended (comma-separated)</p>
+                <textarea className="rounded-xl bg-panel2 border border-border px-3 py-2 min-h-[96px] w-full" placeholder="Air Assault, Ranger, ALC..." {...form.register("timeline.schools")} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted">Qualifications / badges / certs (comma-separated)</p>
+                <textarea className="rounded-xl bg-panel2 border border-border px-3 py-2 min-h-[96px] w-full" placeholder="Parachutist, Expert Infantry Badge, EMT..." {...form.register("timeline.qualifications")} />
+              </div>
             </div>
           </Card>
 
@@ -382,6 +400,14 @@ export function OnboardingIntelligenceIntakePanel() {
           <Card className="p-6 space-y-4">
             <h2 className="font-display text-xl">4. Head-to-Toe Health Questionnaire</h2>
             <p className="text-xs text-muted">Track what occurred this week, severity, functional impact, and whether medical care was sought.</p>
+            <div className="rounded-xl border border-border bg-panel2/40 px-3 py-2 text-[11px] text-muted grid md:grid-cols-[200px_140px_120px_140px_140px_1fr] gap-3">
+              <p>Body system</p>
+              <p>How often this week</p>
+              <p>Severity (0-10)</p>
+              <p>Impact level</p>
+              <p>Care sought</p>
+              <p>Clarification (timing, triggers, missed duty, sleep/training impact)</p>
+            </div>
             <div className="space-y-3">
               {symptomCategories.map((category, index) => (
                 <div key={category} className="grid md:grid-cols-[200px_140px_120px_140px_140px_1fr] gap-3 rounded-xl border border-border p-3 bg-panel2/50">
